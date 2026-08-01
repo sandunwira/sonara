@@ -26,18 +26,23 @@ Sonara is a lightweight Windows music player for Jellyfin servers, with fast nat
 ## Core Capabilities
 
 ### Streaming
+
 Stream your Jellyfin music library with low-latency playback and smooth buffering.
 
 ### Crossfade
+
 Blend tracks together with configurable crossfade duration for a seamless listening experience.
 
 ### Offline Mode
+
 Download music locally and listen without an internet connection.
 
 ### Library Sync
+
 Keep your local metadata cache aligned with your Jellyfin server.
 
 ### Playback Control
+
 Play, pause, skip, seek, shuffle, repeat, and manage your queue from the player.
 
 ## Development Goals
