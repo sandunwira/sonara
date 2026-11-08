@@ -20,7 +20,7 @@ function HomePage() {
 				<h1 className="text-center text-6xl font-medium tracking-tight text-zinc-50 sm:text-7xl">
 					Welcome to
 					<span className="mt-2 block bg-linear-to-b from-zinc-50 to-zinc-500 bg-clip-text text-transparent">
-						Tauri + React
+						Tauri + Vite + React
 					</span>
 				</h1>
 
@@ -41,19 +41,19 @@ function HomePage() {
 							target="_blank"
 							rel="noreferrer"
 							title={`Click to learn more about ${logo.alt}`}
-							className="group flex h-12 w-12 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900/60 p-3 backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-zinc-500 hover:bg-zinc-800"
+							className="group flex h-12 w-12 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900/60 p-3 transition duration-300 hover:border-zinc-500 hover:bg-zinc-800"
 						>
 							<img
 								src={logo.src}
 								alt={`${logo.alt} logo`}
-								className="h-full w-full object-contain opacity-70 transition duration-300 group-hover:opacity-100"
+								className="h-full w-full object-contain"
 							/>
 						</a>
 					))}
 				</div>
 
 				<form
-					className="mt-14 flex w-full max-w-sm items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/60 p-1.5 pl-5 backdrop-blur transition focus-within:border-zinc-500"
+					className="mt-14 flex w-full max-w-sm items-center gap-2 rounded-full border border-zinc-600 bg-zinc-900/60 p-1.5 pl-5 transition focus-within:border-zinc-500"
 					onSubmit={(e) => {
 						e.preventDefault();
 						greet();
@@ -68,7 +68,7 @@ function HomePage() {
 					/>
 					<button
 						type="submit"
-						className="shrink-0 rounded-full bg-zinc-100 px-5 py-2.5 text-sm font-medium text-zinc-950 transition duration-300 hover:bg-white active:scale-95"
+						className="shrink-0 rounded-full bg-zinc-100 px-5 py-2.5 text-sm font-medium text-zinc-950"
 					>
 						Greet
 					</button>
