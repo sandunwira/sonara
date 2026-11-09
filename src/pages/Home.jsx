@@ -1,85 +1,125 @@
-import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useNavigate } from "react-router-dom";
+import { IconServer, IconSparkles, IconMusic, IconRefresh } from "@tabler/icons-react";
+import GenresGrid from "../components/home/GenresGrid";
+import AlbumCarousel from "../components/home/AlbumCarousel";
+import { usePlayer } from "../context/PlayerContext";
+import { useJellyfin } from "../context/JellyfinContext";
 
 function HomePage() {
-	const [greetMsg, setGreetMsg] = useState("");
-	const [name, setName] = useState("");
+	const navigate = useNavigate();
+	const { currentTrack, isPlaying, playTrack, togglePlay, playNext, playLast } = usePlayer();
+	const {
+		isAuthenticated,
+		tracks,
+		recentlyPlayed,
+		genres,
+		isLoading,
+		refreshLibrary,
+		refreshMostPlayed,
+		refreshRecentlyPlayed,
+		isRefreshingMostPlayed,
+		isRefreshingRecentlyPlayed,
+		openServerModal,
+	} = useJellyfin();
 
-	async function greet() {
-		setGreetMsg(await invoke("greet", { name }));
-	}
+	// Limit to strictly 12 genres on the Home page
+	const homeGenres = genres.slice(0, 12);
+	const playFromSection = (item, items) => {
+		const selectedIndex = items.findIndex((track) => track.id === item.id);
+		playTrack(item, selectedIndex >= 0 ? items.slice(selectedIndex) : [item]);
+	};
 
 	return (
-		<div className="relative min-h-screen overflow-hidden bg-zinc-950 text-zinc-100 antialiased">
-			<div className="pointer-events-none absolute inset-0">
-				<div className="absolute -top-32 left-1/2 h-96 w-xl -translate-x-1/2 rounded-full bg-zinc-100/4 blur-3xl" />
-				<div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-size-[4rem_4rem]" />
-			</div>
-
-			<div className="relative mx-auto flex min-h-screen max-w-4xl flex-col items-center justify-center px-6 py-16">
-				<h1 className="text-center text-6xl font-medium tracking-tight text-zinc-50 sm:text-7xl">
-					Welcome to
-					<span className="mt-2 block bg-linear-to-b from-zinc-50 to-zinc-500 bg-clip-text text-transparent">
-						Tauri + Vite + React
-					</span>
-				</h1>
-
-				<p className="mt-8 max-w-md text-center text-sm leading-relaxed text-zinc-400">
-					A minimal desktop app powered by Tauri, built with React and styled
-					with Tailwind CSS.
-				</p>
-
-				<div className="mt-12 flex items-center gap-3">
-					{[
-						{ href: "https://vite.dev", src: "/vite.svg", alt: "Vite" },
-						{ href: "https://tauri.app", src: "/tauri.svg", alt: "Tauri" },
-						{ href: "https://react.dev", src: "/src/assets/react.svg", alt: "React" },
-					].map((logo) => (
-						<a
-							key={logo.alt}
-							href={logo.href}
-							target="_blank"
-							rel="noreferrer"
-							title={`Click to learn more about ${logo.alt}`}
-							className="group flex h-12 w-12 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900/60 p-3 transition duration-300 hover:border-zinc-500 hover:bg-zinc-800"
-						>
-							<img
-								src={logo.src}
-								alt={`${logo.alt} logo`}
-								className="h-full w-full object-contain"
-							/>
-						</a>
-					))}
-				</div>
-
-				<form
-					className="mt-14 flex w-full max-w-sm items-center gap-2 rounded-full border border-zinc-600 bg-zinc-900/60 p-1.5 pl-5 transition focus-within:border-zinc-500"
-					onSubmit={(e) => {
-						e.preventDefault();
-						greet();
-					}}
-				>
-					<input
-						id="greet-input"
-						value={name}
-						onChange={(e) => setName(e.currentTarget.value)}
-						placeholder="Enter a name..."
-						className="w-full bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 outline-none"
-					/>
+		<div className="flex flex-col">
+			{/* Unconnected Banner prompt */}
+			{!isAuthenticated ? (
+				<div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-blue-500/20 bg-linear-to-r from-blue-950/30 via-[#131722] to-[#121217] p-5 text-xs">
+					<div className="flex items-center gap-3.5">
+						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/20 text-blue-400">
+							<IconServer size={20} />
+						</div>
+						<div>
+							<h3 className="text-sm font-semibold text-zinc-100">
+								Connect to Jellyfin
+							</h3>
+							<p className="text-zinc-400 mt-0.5">
+								Authenticate with your personal Jellyfin server to stream your tracks, albums, and playlists directly.
+							</p>
+						</div>
+					</div>
 					<button
-						type="submit"
-						className="shrink-0 rounded-full bg-zinc-100 px-5 py-2.5 text-sm font-medium text-zinc-950"
+						type="button"
+						onClick={openServerModal}
+						className="shrink-0 flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-4 py-2.5 font-medium text-white shadow-md shadow-blue-600/30 transition hover:bg-blue-500 active:scale-95 cursor-pointer"
 					>
-						Greet
+						<IconSparkles size={14} />
+						Connect Server
 					</button>
-				</form>
-
-				{greetMsg && (
-					<p className="mt-6 rounded-full border border-zinc-800 bg-zinc-900/60 px-5 py-2 text-sm text-zinc-300 backdrop-blur">
-						{greetMsg}
+				</div>
+			) : tracks.length === 0 && !isLoading ? (
+				<div className="mb-6 flex flex-col items-center justify-center rounded-lg border border-[#22222a] bg-[#121217] p-8 text-center">
+					<div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 mb-3">
+						<IconMusic size={24} />
+					</div>
+					<h3 className="text-sm font-semibold text-zinc-100">
+						No music found on server
+					</h3>
+					<p className="text-xs text-zinc-400 max-w-sm mt-1 mb-4">
+						Your connected Jellyfin server has no audio tracks, or the music library is still syncing.
 					</p>
-				)}
-			</div>
+					<button
+						type="button"
+						onClick={refreshLibrary}
+						className="flex items-center gap-1.5 rounded-md border border-[#2b2b35] bg-[#181820] px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-[#20202a] hover:text-white"
+					>
+						<IconRefresh size={14} />
+						Sync Library
+					</button>
+				</div>
+			) : null}
+
+			{/* Genres Section (Limited to 12) */}
+			{homeGenres.length > 0 && (
+				<GenresGrid
+					genres={homeGenres}
+					onViewMore={() => navigate("/genres")}
+					onSelectGenre={(genre) => navigate(`/genres/${genre.id}`, { state: { title: genre.name } })}
+				/>
+			)}
+
+			{/* Most Played Carousel */}
+			{tracks.length > 0 && (
+				<AlbumCarousel
+					title="Most Played"
+					items={tracks}
+					onRefresh={refreshMostPlayed}
+					isRefreshing={isRefreshingMostPlayed}
+					currentPlayingId={currentTrack?.id}
+					isPlaying={isPlaying}
+					onPlayItem={(item) => playFromSection(item, tracks)}
+					onPlayNow={(item) => playFromSection(item, tracks)}
+					onTogglePlay={togglePlay}
+					onPlayNext={playNext}
+					onPlayLast={playLast}
+				/>
+			)}
+
+			{/* Recently Played Carousel */}
+			{recentlyPlayed.length > 0 && (
+				<AlbumCarousel
+					title="Recently Played"
+					items={recentlyPlayed}
+					onRefresh={refreshRecentlyPlayed}
+					isRefreshing={isRefreshingRecentlyPlayed}
+					currentPlayingId={currentTrack?.id}
+					isPlaying={isPlaying}
+					onPlayItem={(item) => playFromSection(item, recentlyPlayed)}
+					onPlayNow={(item) => playFromSection(item, recentlyPlayed)}
+					onTogglePlay={togglePlay}
+					onPlayNext={playNext}
+					onPlayLast={playLast}
+				/>
+			)}
 		</div>
 	);
 }

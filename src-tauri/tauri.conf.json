@@ -11,28 +11,29 @@
 		"features": []
 	},
 	"app": {
+		"security": {
+			"csp": null,
+			"capabilities": []
+		},
 		"windows": [
 			{
 				"title": "Sonara",
 				"label": "main",
-				"minWidth": 1100,
 				"width": 1200,
+				"minWidth": 1100,
 				"maxWidth": 1600,
-				"minHeight": 600,
 				"height": 700,
+				"minHeight": 600,
 				"maxHeight": 700,
 				"dragDropEnabled": false,
 				"center": true,
 				"focusable": true,
 				"focus": true,
-				"decorations": true,
+				"decorations": false,
 				"backgroundColor": "#18181B"
 			}
 		],
-		"withGlobalTauri": true,
-		"security": {
-			"csp": null
-		}
+		"withGlobalTauri": true
 	},
 	"bundle": {
 		"active": true,
@@ -64,6 +65,9 @@
 			"webviewInstallMode": {
 				"silent": true,
 				"type": "downloadBootstrapper"
+			},
+			"wix": {
+				"language": "en-US"
 			}
 		},
 		"resources": []
