@@ -94,6 +94,7 @@ html {
 	scroll-behavior: smooth;
 	-ms-overflow-style: none;
 	scrollbar-width: none;
+	transition: grid-auto-columns 0.3s ease;
 }
 
 .carousel-row::-webkit-scrollbar {
@@ -108,24 +109,61 @@ html {
 
 @media (min-width: 768px) {
 	.carousel-row {
-		grid-auto-columns: calc((100% - 4 * 0.75rem) / 5);
+		grid-auto-columns: calc((100% - 4 * 0.75rem) / 4);
 	}
 }
 
 @media (min-width: 1024px) {
 	.carousel-row {
-		grid-auto-columns: calc((100% - 5 * 0.75rem) / 6);
+		grid-auto-columns: calc((100% - 5 * 0.75rem) / 4);
 	}
 }
 
 @media (min-width: 1280px) {
 	.carousel-row {
-		grid-auto-columns: calc((100% - 7 * 0.75rem) / 8);
+		grid-auto-columns: calc((100% - 7 * 0.75rem) / 7);
 	}
 }
 
 @media (min-width: 1536px) {
 	.carousel-row {
-		grid-auto-columns: calc((100% - 9 * 0.75rem) / 10);
+		grid-auto-columns: calc((100% - 9 * 0.75rem) / 8);
+	}
+}
+
+/* Compact variant: more, smaller columns while a right-side panel (queue)
+   shrinks the content area, so the same rows still fit the container. The
+   base grid rule auto-restores as soon as the compact class is removed. */
+.carousel-row.compact {
+	grid-auto-columns: calc((100% - 3 * 0.75rem) / 4);
+}
+
+@media (min-width: 640px) {
+	.carousel-row.compact {
+		grid-auto-columns: calc((100% - 5 * 0.75rem) / 4);
+	}
+}
+
+@media (min-width: 768px) {
+	.carousel-row.compact {
+		grid-auto-columns: calc((100% - 6 * 0.75rem) / 4);
+	}
+}
+
+@media (min-width: 1024px) {
+	.carousel-row.compact {
+		grid-auto-columns: calc((100% - 7 * 0.75rem) / 4);
+	}
+}
+
+@media (min-width: 1280px) {
+	.carousel-row.compact {
+		grid-auto-columns: calc((100% - 9 * 0.75rem) / 7);
+	}
+}
+
+@media (min-width: 1536px) {
+	.carousel-row.compact {
+		grid-auto-columns: calc((100% - 11 * 0.75rem) / 8);
 	}
 }

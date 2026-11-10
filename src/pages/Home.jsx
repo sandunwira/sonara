@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { IconMusic, IconRefresh } from "@tabler/icons-react";
 import GenresGrid from "../components/home/GenresGrid";
 import AlbumCarousel from "../components/home/AlbumCarousel";
@@ -8,6 +8,7 @@ import useGenrePlayback from "../hooks/useGenrePlayback";
 
 function HomePage() {
 	const navigate = useNavigate();
+	const { isQueuePanelOpen = false } = useOutletContext() || {};
 	const { currentTrack, playTrack, playNext, playLast } = usePlayer();
 	const {
 		isAuthenticated,
@@ -83,6 +84,7 @@ function HomePage() {
 					items={tracks}
 					onRefresh={refreshMostPlayed}
 					isRefreshing={isRefreshingMostPlayed}
+					compact={isQueuePanelOpen}
 					currentPlayingId={currentTrack?.id}
 					isPlaying={isPlaying}
 					onPlayItem={(item) => playFromSection(item, tracks)}
@@ -100,6 +102,7 @@ function HomePage() {
 					items={recentlyPlayed}
 					onRefresh={refreshRecentlyPlayed}
 					isRefreshing={isRefreshingRecentlyPlayed}
+					compact={isQueuePanelOpen}
 					currentPlayingId={currentTrack?.id}
 					isPlaying={isPlaying}
 					onPlayItem={(item) => playFromSection(item, recentlyPlayed)}

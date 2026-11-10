@@ -24,6 +24,7 @@ function AlbumCarousel({
 	isPlaying,
 	onRefresh,
 	isRefreshing = false,
+	compact = false,
 }) {
 	const scrollContainerRef = useRef(null);
 	const [hoveredId, setHoveredId] = useState(null);
@@ -99,7 +100,7 @@ function AlbumCarousel({
 			{/* Albums Carousel (Strictly 1 Row) */}
 			<div
 				ref={scrollContainerRef}
-				className="carousel-row pb-1"
+				className={`carousel-row pb-1 ${compact ? "compact" : ""}`}
 			>
 				{items.map((item) => {
 					const isCardSelected = item.isSelected;

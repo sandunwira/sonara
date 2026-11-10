@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
 	IconArrowsShuffle,
 	IconPlayerSkipBackFilled,
@@ -7,10 +7,6 @@ import {
 	IconPlayerPauseFilled,
 	IconRepeat,
 	IconPlaylist,
-	IconChevronUp,
-	IconChevronDown,
-	IconTrash,
-	IconX,
 	IconPictureInPicture,
 	IconDeviceSpeaker,
 	IconHeart,
@@ -31,7 +27,7 @@ function formatSeconds(sec) {
 	return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
 }
 
-function BottomPlayerBar({ onTrackOptions }) {
+function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueuePanel }) {
 	const {
 		currentTrack,
 		isPlaying,
@@ -51,16 +47,9 @@ function BottomPlayerBar({ onTrackOptions }) {
 		seek,
 		queue,
 		queueIndex,
-		removeQueuedTrack,
-		moveQueuedTrack,
-		clearQueue,
-		playQueueItem,
 	} = usePlayer();
 
 	const [isFavorite, setIsFavorite] = useState(false);
-	const [isQueueOpen, setIsQueueOpen] = useState(false);
-	const queueMenuRef = useRef(null);
-	const queueToggleRef = useRef(null);
 
 	const validDuration = duration && duration > 0 ? duration : 180;
 	const progressPercent = Math.min(100, Math.max(0, (currentTime / validDuration) * 100));
@@ -72,164 +61,8 @@ function BottomPlayerBar({ onTrackOptions }) {
 	const upcomingStartIndex = Math.max(queueIndex + 1, 0);
 	const upcomingTracks = queue.slice(upcomingStartIndex);
 
-	useEffect(() => {
-		if (!isQueueOpen) return undefined;
-
-		const handlePointerDown = (event) => {
-			if (
-				!queueMenuRef.current?.contains(event.target)
-				&& !queueToggleRef.current?.contains(event.target)
-			) {
-				setIsQueueOpen(false);
-			}
-		};
-		const handleKeyDown = (event) => {
-			if (event.key === "Escape") setIsQueueOpen(false);
-		};
-
-		document.addEventListener("pointerdown", handlePointerDown);
-		document.addEventListener("keydown", handleKeyDown);
-		return () => {
-			document.removeEventListener("pointerdown", handlePointerDown);
-			document.removeEventListener("keydown", handleKeyDown);
-		};
-	}, [isQueueOpen]);
-
 	return (
 		<footer className="relative z-40 flex h-20 w-full shrink-0 items-center justify-between border-t border-[#1b1b22] bg-[#0c0c0e] px-4 text-zinc-300">
-			{isQueueOpen && (
-				<section
-					ref={queueMenuRef}
-					aria-label="Playback queue"
-					className="absolute bottom-full right-4 z-60 mb-2 flex max-h-[min(70vh,32rem)] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden border border-zinc-700 bg-[#111115] text-zinc-200 shadow-2xl"
-				>
-					<header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-						<div>
-							<h2 className="text-sm font-semibold text-white">Queue</h2>
-							<p className="text-[11px] text-zinc-500">
-								{upcomingTracks.length} upcoming {upcomingTracks.length === 1 ? "track" : "tracks"}
-							</p>
-						</div>
-						<div className="flex items-center gap-2">
-							<button
-								type="button"
-								onClick={clearQueue}
-								disabled={upcomingTracks.length === 0}
-								title="Clear upcoming tracks"
-								aria-label="Clear upcoming tracks"
-								className="flex items-center gap-1 rounded-xs px-2 py-1 text-[11px] text-zinc-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-							>
-								<IconTrash size={13} />
-								Clear
-							</button>
-							<button
-								type="button"
-								onClick={() => setIsQueueOpen(false)}
-								aria-label="Close queue"
-								className="rounded-xs p-1 text-zinc-400 hover:bg-white/5 hover:text-white"
-							>
-								<IconX size={15} />
-							</button>
-						</div>
-					</header>
-
-					<div className="overflow-y-auto p-2">
-						{currentTrack && (
-							<div className="mb-2">
-								<p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-									Now Playing
-								</p>
-								<div className="flex items-center gap-3 rounded-xs bg-white/5 px-2 py-2">
-									<Artwork
-										src={currentTrack.cover}
-										alt=""
-										className="h-9 w-9 rounded-xs object-cover"
-									/>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-xs font-medium text-white">{currentTrack.title}</p>
-										<p className="truncate text-[11px] text-zinc-400">{currentTrack.artist}</p>
-									</div>
-									<span className="shrink-0 text-[10px] text-blue-400">
-										{isPlaying ? "Playing" : "Paused"}
-									</span>
-								</div>
-							</div>
-						)}
-
-						<div>
-							<p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-								Up Next
-							</p>
-							{upcomingTracks.length === 0 ? (
-								<p className="px-2 py-4 text-center text-xs text-zinc-500">
-									No tracks in the queue
-								</p>
-							) : (
-								<ul className="space-y-1">
-									{upcomingTracks.map((track, offset) => {
-										const index = upcomingStartIndex + offset;
-										return (
-											<li
-												key={`${track.id}-${index}`}
-												className="group flex items-center gap-2 rounded-xs px-2 py-2 hover:bg-white/5"
-											>
-												<button
-													type="button"
-													onClick={() => playQueueItem(index)}
-													aria-label={`Play ${track.title}`}
-													className="flex min-w-0 flex-1 items-center gap-3 text-left"
-												>
-													<Artwork
-														src={track.cover}
-														alt=""
-														className="h-9 w-9 shrink-0 rounded-xs object-cover"
-													/>
-													<span className="min-w-0 flex-1">
-														<span className="block truncate text-xs font-medium text-zinc-200">
-															{track.title}
-														</span>
-														<span className="block truncate text-[11px] text-zinc-500">
-															{track.artist}
-														</span>
-													</span>
-												</button>
-												<div className="flex shrink-0 items-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
-													<button
-														type="button"
-														onClick={() => moveQueuedTrack(index, index - 1)}
-														disabled={offset === 0}
-														aria-label={`Move ${track.title} up`}
-														className="rounded-xs p-1 text-zinc-400 hover:text-white disabled:opacity-30"
-													>
-														<IconChevronUp size={14} />
-													</button>
-													<button
-														type="button"
-														onClick={() => moveQueuedTrack(index, index + 1)}
-														disabled={offset === upcomingTracks.length - 1}
-														aria-label={`Move ${track.title} down`}
-														className="rounded-xs p-1 text-zinc-400 hover:text-white disabled:opacity-30"
-													>
-														<IconChevronDown size={14} />
-													</button>
-													<button
-														type="button"
-														onClick={() => removeQueuedTrack(index)}
-														aria-label={`Remove ${track.title} from queue`}
-														className="rounded-xs p-1 text-zinc-500 hover:text-red-400"
-													>
-														<IconX size={14} />
-													</button>
-												</div>
-											</li>
-										);
-									})}
-								</ul>
-							)}
-						</div>
-					</div>
-				</section>
-			)}
 			{/* Left section: Current playing track album art & details */}
 			<div className="flex w-1/4 min-w-48 items-center gap-3">
 				{currentTrack ? (
@@ -346,14 +179,13 @@ function BottomPlayerBar({ onTrackOptions }) {
 						<IconRepeat size={14} stroke={2} />
 					</button>
 
-					{/* Playlist / Queue */}
+					{/* Playlist / Queue — toggles the collapsible right panel */}
 					<button
 						type="button"
-						ref={queueToggleRef}
-						onClick={() => setIsQueueOpen((open) => !open)}
+						onClick={toggleQueuePanel}
 						aria-label="View queue"
-						aria-expanded={isQueueOpen}
-						className={`relative text-zinc-400 transition hover:scale-110 hover:text-white ${isQueueOpen ? "text-white" : ""}`}
+						aria-expanded={isQueuePanelOpen}
+						className={`relative text-zinc-400 transition hover:scale-110 hover:text-white ${isQueuePanelOpen ? "text-white" : ""}`}
 					>
 						<IconPlaylist size={14} stroke={2} />
 						{upcomingTracks.length > 0 && (
