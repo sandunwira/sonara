@@ -41,10 +41,10 @@ function TitleBar({ title }) {
 			<div className="block h-7 w-[calc(100%-160px)] fixed top-0 left-0" data-tauri-drag-region></div>
 			<div className="flex items-center justify-between h-full w-full">
 				{/* App Title */}
-				<div className="flex flex-row items-center gap-2 pl-2 overflow-hidden">
+				<div className="flex flex-row items-center gap-1.5 pl-2 overflow-hidden">
 					<img
-						src="/tauri.svg"
-						className="h-2.5 w-2.5 shrink-0"
+						src="/logos/logo-filled.png"
+						className="h-3.5 w-3.5 object-center object-contain"
 						alt="Sonara logo"
 					/>
 					<span className="text-xs font-semibold text-zinc-300 truncate max-w-[calc(100vw-200px)]">
