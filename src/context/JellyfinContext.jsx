@@ -12,7 +12,11 @@ import {
 } from "../services/jellyfin";
 import {
 	getStoredJellyfinSession,
+	getStoredJellyfinServers,
+	normalizeServerUrl,
 	removeStoredJellyfinSession,
+	removeStoredJellyfinServer,
+	upsertStoredJellyfinServer,
 	recordAppLog,
 	saveStoredJellyfinSession,
 } from "../services/jellyfinCache";
@@ -36,6 +40,7 @@ export function JellyfinProvider({ children }) {
 	const [recentlyPlayed, setRecentlyPlayed] = useState([]);
 	const [genres, setGenres] = useState([]);
 	const [isOffline, setIsOffline] = useState(false);
+	const [servers, setServers] = useState([]);
 
 	const isAuthenticated = Boolean(session?.accessToken && session?.serverUrl && session?.userId);
 
@@ -76,15 +81,24 @@ export function JellyfinProvider({ children }) {
 		window.addEventListener("online", handleOnline);
 
 		let cancelled = false;
-		getStoredJellyfinSession()
-			.then((savedSession) => {
-				if (cancelled) return;
-				if (isConfiguredSession(savedSession)) {
-					setSession(savedSession);
-				} else {
-					setIsServerModalOpen(true);
+		const bootstrap = async () => {
+			const savedServers = await getStoredJellyfinServers();
+			const savedSession = await getStoredJellyfinSession();
+			if (isConfiguredSession(savedSession)) {
+				setSession(savedSession);
+				// First launch after this feature: the previously connected
+				// server becomes the first entry of the saved server list.
+				if (!savedServers.some((server) => normalizeServerUrl(server.serverUrl) === normalizeServerUrl(savedSession.serverUrl))) {
+					await upsertStoredJellyfinServer(savedSession);
+					savedServers.push(savedSession);
 				}
-			})
+			} else {
+				setIsServerModalOpen(true);
+			}
+			if (!cancelled) setServers(savedServers);
+		};
+
+		bootstrap()
 			.catch((error) => {
 				console.error("Could not load the saved Jellyfin session from the database:", error);
 				if (!cancelled) setIsServerModalOpen(true);
@@ -215,6 +229,71 @@ export function JellyfinProvider({ children }) {
 			setIsSyncingLibrary(false);
 		}
 	}, [loadLibrary, session]);
+	const switchServer = useCallback(async (serverUrl) => {
+		if (!serverUrl) return;
+		const target = (await getStoredJellyfinServers())
+			.find((server) => normalizeServerUrl(server.serverUrl) === normalizeServerUrl(serverUrl));
+		if (!target) {
+			toast.error("That server is not saved in Sonara");
+			return;
+		}
+		if (session && normalizeServerUrl(session.serverUrl) === normalizeServerUrl(target.serverUrl)) {
+			toast.success(`${target.serverName || "That server"} is already the active server`);
+			return;
+		}
+
+		setIsLoading(true);
+		try {
+			// Content on screen belongs to the previous server.
+			setTracks([]);
+			setRecentlyPlayed([]);
+			setGenres([]);
+			setLibraryVersion((version) => version + 1);
+			// Keep the last activated server as the session restored on relaunch.
+			await saveStoredJellyfinSession(target);
+			setSession(target);
+			await recordAppLog("info", "jellyfin", "Switched active Jellyfin server", {
+				fromServerUrl: session?.serverUrl || null,
+				toServerUrl: target.serverUrl,
+			});
+			toast.success(`Switched to ${target.serverName || target.serverUrl}`);
+		} catch (error) {
+			console.error("Could not switch Jellyfin server:", error);
+			recordAppLog("error", "jellyfin", "Switching Jellyfin server failed", {
+				message: error.message,
+				serverUrl: target.serverUrl,
+			});
+			toast.error("Could not switch server");
+		} finally {
+			setIsLoading(false);
+		}
+	}, [session]);
+
+	const removeServer = useCallback(async (serverUrl) => {
+		if (!serverUrl) return;
+		const isActive = Boolean(session && normalizeServerUrl(session.serverUrl) === normalizeServerUrl(serverUrl));
+		try {
+			await removeStoredJellyfinServer(serverUrl);
+			if (isActive) await removeStoredJellyfinSession();
+		} catch (error) {
+			console.error("Could not remove the Jellyfin server:", error);
+			toast.error("Could not remove server");
+			return;
+		}
+		setServers((current) => current.filter(
+			(server) => normalizeServerUrl(server.serverUrl) !== normalizeServerUrl(serverUrl),
+		));
+		if (isActive) {
+			setSession(null);
+			setTracks([]);
+			setRecentlyPlayed([]);
+			setGenres([]);
+			setIsServerModalOpen(true);
+		} else {
+			toast.success("Server removed");
+		}
+	}, [session]);
+
 	const reportPlaybackEvent = useCallback(async (event, itemId, state) => {
 		if (!session?.accessToken || !session?.serverUrl || !session?.userId) return false;
 
@@ -253,6 +332,11 @@ export function JellyfinProvider({ children }) {
 			};
 
 			await saveStoredJellyfinSession(newSession);
+			await upsertStoredJellyfinServer(newSession);
+			setServers((current) => [
+				...current.filter((server) => normalizeServerUrl(server.serverUrl) !== normalizeServerUrl(newSession.serverUrl)),
+				newSession,
+			]);
 			await recordAppLog("info", "jellyfin", "Connected to Jellyfin server", {
 				serverUrl: newSession.serverUrl,
 				userId: newSession.userId,
@@ -281,6 +365,12 @@ export function JellyfinProvider({ children }) {
 	const disconnectServer = async () => {
 		try {
 			await removeStoredJellyfinSession();
+			if (session?.serverUrl) {
+				await removeStoredJellyfinServer(session.serverUrl);
+				setServers((current) => current.filter(
+					(server) => normalizeServerUrl(server.serverUrl) !== normalizeServerUrl(session.serverUrl),
+				));
+			}
 		} catch (error) {
 			console.error("Could not remove the saved Jellyfin session:", error);
 			toast.error("Could not disconnect from Jellyfin");
@@ -313,6 +403,9 @@ export function JellyfinProvider({ children }) {
 				isSyncingLibrary,
 				libraryVersion,
 				isOffline,
+				servers,
+				switchServer,
+				removeServer,
 				refreshMostPlayed,
 				refreshRecentlyPlayed,
 				reportTrackPlayed,

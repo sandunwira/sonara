@@ -49,6 +49,15 @@ pub fn run() {
             CREATE INDEX IF NOT EXISTS app_logs_created_at_idx ON app_logs(created_at);",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "create_jellyfin_server_list_storage",
+            sql: "CREATE TABLE IF NOT EXISTS jellyfin_servers (
+                server_url TEXT PRIMARY KEY NOT NULL,
+                data TEXT NOT NULL
+            );",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

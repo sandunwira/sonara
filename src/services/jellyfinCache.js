@@ -193,6 +193,52 @@ export async function fetchCachedJellyfinJson(url, headers, { forceRefresh = fal
 	return response;
 }
 
+export async function getStoredJellyfinServers() {
+	const database = await getDatabase();
+	if (!database) return [];
+
+	const rows = await database.select("SELECT data FROM jellyfin_servers");
+	return rows
+		.map((row) => {
+			try {
+				return JSON.parse(row.data);
+			} catch {
+				return null;
+			}
+		})
+		.filter(Boolean)
+		.filter((server) => server?.serverUrl && server?.accessToken && server?.userId);
+}
+
+export async function upsertStoredJellyfinServer(server) {
+	const database = await getDatabase();
+	if (!database) {
+		throw new Error("Jellyfin server storage requires the Sonara desktop app");
+	}
+
+	await database.execute(
+		`INSERT INTO jellyfin_servers (server_url, data)
+		 VALUES ($1, $2)
+		 ON CONFLICT(server_url) DO UPDATE SET data = excluded.data`,
+		[normalizeServerUrl(server.serverUrl), JSON.stringify(server)],
+	);
+}
+
+export async function removeStoredJellyfinServer(serverUrl) {
+	const database = await getDatabase();
+	if (!database) {
+		throw new Error("Jellyfin server storage requires the Sonara desktop app");
+	}
+
+	await database.execute("DELETE FROM jellyfin_servers WHERE server_url = $1", [
+		normalizeServerUrl(serverUrl),
+	]);
+}
+
+export function normalizeServerUrl(serverUrl) {
+	return String(serverUrl || "").replace(/\/+$/, "").toLowerCase();
+}
+
 export async function getStoredJellyfinSession() {
 	const database = await getDatabase();
 	if (!database) return null;

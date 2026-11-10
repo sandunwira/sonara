@@ -15,6 +15,7 @@ import {
 	IconRefresh,
 } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
+import ServerDropdown from "./ServerDropdown";
 
 function Sidebar() {
 	const location = useLocation();
@@ -41,7 +42,10 @@ function Sidebar() {
 	return (
 		<aside className="flex h-full w-55 shrink-0 flex-col justify-between border-r border-[#1b1b22] bg-[#0d0d10] text-zinc-300">
 			{/* Top nav scrollable section */}
-			<div className="flex flex-1 flex-col overflow-y-auto px-3 py-3.5">
+			<div className="flex flex-1 flex-col overflow-y-auto px-3 py-3.5 space-y-3">
+				{/* Active Jellyfin server switcher */}
+				<ServerDropdown />
+
 				{/* My Library group */}
 				<div>
 					<button
@@ -71,7 +75,7 @@ function Sidebar() {
 										type="button"
 										onClick={() => handleNavClick(item.path)}
 										className={`group flex w-full items-center gap-2.5 rounded-xs px-2.5 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
-												? "text-blue-500 font-semibold bg-blue-500/10"
+												? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
 												: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
 											}`}
 									>
@@ -93,7 +97,7 @@ function Sidebar() {
 				</div>
 
 				{/* Playlists Section */}
-				<div className="mt-5">
+				<div>
 					<div className="flex items-center justify-between py-1.5 text-xs font-semibold tracking-tight text-zinc-400">
 						<span>Playlists</span>
 						<div className="flex items-center gap-1">
@@ -117,7 +121,7 @@ function Sidebar() {
 			</div>
 
 			{/* Bottom Jellyfin Server Connection Bar */}
-			<div className="border-t border-[#1b1b22] bg-[#0c0c0f] p-2.5">
+			{/* <div className="border-t border-[#1b1b22] bg-[#0c0c0f] p-2.5">
 				<div className={`flex w-full items-center gap-1 rounded-xs border p-1 transition ${isAuthenticated
 						? "border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-zinc-200"
 						: "border-zinc-800 bg-[#141419] hover:bg-[#1c1c24] text-zinc-300"
@@ -165,7 +169,7 @@ function Sidebar() {
 						</button>
 					)}
 				</div>
-			</div>
+			</div> */}
 		</aside>
 	);
 }

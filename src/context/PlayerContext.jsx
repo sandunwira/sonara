@@ -113,6 +113,36 @@ export function PlayerProvider({ children }) {
 		});
 	}, [queue, queueIndex, currentTrack]);
 
+	// When the active Jellyfin server changes, the saved queue no longer makes
+	// sense (its track ids/stream urls belong to the previous server), so stop
+	// playback and start the new server with an empty queue.
+	const activeServerUrlRef = useRef(undefined);
+	useEffect(() => {
+		if (!isSessionLoaded || !queueRestoredRef.current) return undefined;
+		const serverUrl = session?.serverUrl || null;
+		if (activeServerUrlRef.current === undefined) {
+			activeServerUrlRef.current = serverUrl;
+			return undefined;
+		}
+		if (activeServerUrlRef.current === serverUrl) return undefined;
+		activeServerUrlRef.current = serverUrl;
+
+		if (progressIntervalRef.current) {
+			clearInterval(progressIntervalRef.current);
+			progressIntervalRef.current = null;
+		}
+		audioRef.current?.pause();
+		activePlaybackTrackRef.current = null;
+		reportedTrackIdRef.current = null;
+		setIsPlaying(false);
+		setCurrentTime(0);
+		setDuration(0);
+		setCurrentTrack(null);
+		currentTrackRef.current = null;
+		updateQueue([], -1);
+		return undefined;
+	}, [isSessionLoaded, session]);
+
 	const getPlaybackState = (isPaused) => {
 		const audio = audioRef.current;
 		return {
