@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+	IconAntennaBars5,
 	IconCheck,
 	IconChevronDown,
 	IconPlus,
@@ -8,6 +9,31 @@ import {
 } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { normalizeServerUrl } from "../services/jellyfinCache";
+
+const CONNECTION_STATUS_META = {
+	ok: { label: "Connected to Jellyfin", className: "text-emerald-500" },
+	weak: { label: "Weak connection to Jellyfin", className: "text-amber-500" },
+	offline: { label: "Offline — Jellyfin server unreachable", className: "text-zinc-600" },
+	checking: { label: "Checking connection", className: "text-zinc-500" },
+};
+
+// Small signal indicator left of the selected server name, always visible.
+// Colors track the connection state: green healthy, amber weak, gray offline.
+function ConnectionStatusIcon() {
+	const { connectionStatus } = useJellyfin();
+
+	const meta = CONNECTION_STATUS_META[connectionStatus] || CONNECTION_STATUS_META.offline;
+
+	return (
+		<IconAntennaBars5
+			size={15}
+			stroke={1.8}
+			aria-label={meta.label}
+			title={meta.label}
+			className={`shrink-0 transition-opacity duration-300 ease-out ${meta.className} opacity-100`}
+		/>
+	);
+}
 
 function ServerDropdown() {
 	const { isAuthenticated, session, servers, switchServer, removeServer, openServerModal } = useJellyfin();
@@ -51,7 +77,8 @@ function ServerDropdown() {
 				title="Switch Jellyfin server"
 				className="flex w-full items-center gap-2 rounded-xs text-left"
 			>
-				<span className="flex min-w-0 flex-1 items-center">
+				<span className="flex min-w-0 flex-1 items-center gap-1.5">
+					<ConnectionStatusIcon />
 					<span className="truncate text-xs font-medium text-zinc-100">
 						{isAuthenticated ? currentServerName : "No Server"}
 					</span>

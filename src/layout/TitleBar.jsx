@@ -1,61 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Window } from '@tauri-apps/api/window';
 import {
 	IconMinus,
 	IconSquare,
 	IconX,
-	IconAntennaBars5,
 } from "@tabler/icons-react";
 import { usePlayer } from '../context/PlayerContext';
-import { useJellyfin } from '../context/JellyfinContext';
 
 const appWindow = Window.getCurrent();
-
-const CONNECTION_STATUS_META = {
-	ok: { label: "Connected to Jellyfin", text: "Connected", className: "text-emerald-500" },
-	weak: { label: "Weak connection to Jellyfin", text: "Weak", className: "text-amber-500" },
-	offline: { label: "Offline - Jellyfin server unreachable", text: "Offline", className: "text-zinc-600" },
-	checking: { label: "Checking connection", text: "Connecting", className: "text-zinc-500" },
-};
-
-// Small wifi indicator to the left of the window action buttons. Green is
-// shown for 5 seconds after the connection becomes healthy and then fades
-// out; weak/offline states stay visible until the connection is fixed.
-function ConnectionIndicator() {
-	const { connectionStatus } = useJellyfin();
-	const [isGreenVisible, setIsGreenVisible] = useState(true);
-
-	useEffect(() => {
-		if (connectionStatus !== "ok") {
-			setIsGreenVisible(true);
-			return undefined;
-		}
-		setIsGreenVisible(true);
-		const timer = setTimeout(() => setIsGreenVisible(false), 5000);
-		return () => clearTimeout(timer);
-	}, [connectionStatus]);
-
-	const meta = CONNECTION_STATUS_META[connectionStatus] || CONNECTION_STATUS_META.offline;
-	// The element stays mounted so state changes fade smoothly instead of
-	// popping (a healthy connection fades out and collapses after 5 seconds).
-	const isHidden = connectionStatus === "ok" && !isGreenVisible;
-
-	return (
-		<span
-			title={meta.label}
-			aria-label={meta.label}
-			aria-hidden={isHidden}
-			className={`h-full flex items-center justify-center gap-1 no-drag transition-all duration-300 ease-out ${meta.className} ${
-				isHidden
-					? "opacity-0 px-0 max-w-0 overflow-hidden pointer-events-none"
-					: "opacity-100 px-1.5 max-w-40"
-			}`}
-		>
-			<IconAntennaBars5 size={13} stroke={1.8} />
-			<span className="text-[10px] font-medium whitespace-nowrap overflow-hidden">{meta.text}</span>
-		</span>
-	);
-}
 
 function TitleBar({ title }) {
 	const { title: playerTitle } = usePlayer();
@@ -102,7 +54,6 @@ function TitleBar({ title }) {
 
 				{/* Window Controls */}
 				<div className="flex h-full text-white">
-					<ConnectionIndicator />
 					<button
 						type="button"
 						onClick={handleMinimize}
