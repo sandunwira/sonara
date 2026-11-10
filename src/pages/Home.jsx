@@ -4,10 +4,11 @@ import GenresGrid from "../components/home/GenresGrid";
 import AlbumCarousel from "../components/home/AlbumCarousel";
 import { usePlayer } from "../context/PlayerContext";
 import { useJellyfin } from "../context/JellyfinContext";
+import useGenrePlayback from "../hooks/useGenrePlayback";
 
 function HomePage() {
 	const navigate = useNavigate();
-	const { currentTrack, isPlaying, playTrack, togglePlay, playNext, playLast } = usePlayer();
+	const { currentTrack, playTrack, playNext, playLast } = usePlayer();
 	const {
 		isAuthenticated,
 		tracks,
@@ -20,6 +21,14 @@ function HomePage() {
 		isRefreshingMostPlayed,
 		isRefreshingRecentlyPlayed,
 	} = useJellyfin();
+	const {
+		playGenre,
+		pendingGenreIds,
+		currentGenreNames,
+		queueGenreNames,
+		isPlaying,
+		togglePlay,
+	} = useGenrePlayback();
 
 	// Limit to strictly 12 genres on the Home page
 	const homeGenres = genres.slice(0, 12);
@@ -58,6 +67,12 @@ function HomePage() {
 					genres={homeGenres}
 					onViewMore={() => navigate("/genres")}
 					onSelectGenre={(genre) => navigate(`/genres/${genre.id}`, { state: { title: genre.name } })}
+					onPlayGenre={playGenre}
+					onTogglePlay={togglePlay}
+					isPlaying={isPlaying}
+					pendingGenreIds={pendingGenreIds}
+					currentGenreNames={currentGenreNames}
+					queueGenreNames={queueGenreNames}
 				/>
 			)}
 

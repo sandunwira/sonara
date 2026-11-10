@@ -4,6 +4,8 @@ import { IconChevronLeft, IconSearch, IconServer } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicCollection, fetchMusicItem } from "../services/jellyfin";
+import useGenrePlayback from "../hooks/useGenrePlayback";
+import GenrePlayButton from "../components/GenrePlayButton";
 import Artwork from "../components/Artwork";
 
 function formatDuration(seconds) {
@@ -26,6 +28,7 @@ export default function LibraryCollectionPage({
 	const navigate = useNavigate();
 	const { session, isAuthenticated, openServerModal, libraryVersion } = useJellyfin();
 	const { playTrack } = usePlayer();
+	const { playGenre, pendingGenreIds, currentGenreNames, queueGenreNames, isPlaying, togglePlay } = useGenrePlayback();
 	const [items, setItems] = useState([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState("");
@@ -171,22 +174,47 @@ export default function LibraryCollectionPage({
 			) : entityList && !detailId ? (
 				genreCards ? (
 					<div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-						{visibleItems.map((genre) => (
-							<button
-								key={genre.id}
-								type="button"
-								onClick={() => navigate(`${detailPath}/${genre.id}`, { state: { title: genre.name } })}
-								className="group relative flex h-11 items-center overflow-hidden rounded-xs border border-[#22222b]/80 bg-[#141419] px-3 text-left transition-all duration-200 hover:border-zinc-700 hover:bg-[#1f1f28]"
-							>
-								<span
-									className="absolute bottom-0 left-0 top-0 w-1 rounded-l-xs transition-all group-hover:w-1.5"
-									style={{ backgroundColor: genre.color }}
-								/>
-								<span className="truncate pl-1.5 text-xs font-medium text-zinc-200 group-hover:text-white">
-									{genre.name}
-								</span>
-							</button>
-						))}
+						{visibleItems.map((genre) => {
+							const nameKey = String(genre.name || "").toLowerCase();
+							const isPending = pendingGenreIds?.has(genre.id) || false;
+							const isCurrentGenre = currentGenreNames?.has(nameKey) || false;
+							const isQueuedGenre = queueGenreNames?.has(nameKey) || false;
+							const navigateToGenre = () =>
+								navigate(`${detailPath}/${genre.id}`, { state: { title: genre.name } });
+							return (
+								<div
+									key={genre.id}
+									role="button"
+									tabIndex={0}
+									onClick={navigateToGenre}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault();
+											navigateToGenre();
+										}
+									}}
+									aria-label={`Open ${genre.name}`}
+									className="group relative flex h-11 items-center overflow-hidden rounded-xs border border-[#22222b]/80 bg-[#141419] px-3 text-left transition-all duration-200 hover:border-zinc-700 hover:bg-[#1f1f28] focus:outline-none focus-visible:border-blue-500 cursor-pointer"
+								>
+									<span
+										className="absolute bottom-0 left-0 top-0 w-1 rounded-l-xs transition-all group-hover:w-1.5"
+										style={{ backgroundColor: genre.color }}
+									/>
+									<span className="truncate pl-1.5 pr-7 text-xs font-medium text-zinc-200 group-hover:text-white">
+										{genre.name}
+									</span>
+									<GenrePlayButton
+										genre={genre}
+										isPlaying={isPlaying}
+										isPending={isPending}
+										isCurrentGenre={isCurrentGenre}
+										isQueuedGenre={isQueuedGenre}
+										onPlay={playGenre}
+										onTogglePlay={togglePlay}
+									/>
+								</div>
+							);
+						})}
 					</div>
 				) : (
 					<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">

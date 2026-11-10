@@ -102,9 +102,14 @@ export function PlayerProvider({ children }) {
 		if (!queueRestoredRef.current) return;
 
 		saveStoredPlayerQueue({
-			queue: queue.map(({ id, title, artist, album, albumId, duration, isJellyfin }) => ({
-				id, title, artist, album, albumId, duration, isJellyfin,
-			})),
+			queue: queue.map((track) => {
+				const { id, title, artist, album, albumId, duration, isJellyfin, genreNames, raw } = track;
+				return {
+					id, title, artist, album, albumId, duration, isJellyfin,
+					// Kept so a restored queue can still be matched to genre cards.
+					genreNames: genreNames || raw?.Genres || [],
+				};
+			}),
 			queueIndex,
 			currentTrackId: currentTrack?.id || null,
 		}).catch((error) => {
