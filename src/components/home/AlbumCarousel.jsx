@@ -54,7 +54,7 @@ function AlbumCarousel({
 	};
 
 	return (
-		<section className="mb-7">
+		<section>
 			{/* Section Header */}
 			<div className="mb-3 flex items-center justify-between">
 				<div className="flex items-center gap-2">

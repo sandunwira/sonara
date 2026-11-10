@@ -96,7 +96,7 @@ export default function LibraryCollectionPage({
 
 	return (
 		<div className="flex flex-col">
-			<header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+			<header className="sticky top-0 z-30 flex flex-col gap-4 bg-[#0a0a0d] sm:flex-row sm:items-center sm:justify-between py-7">
 				<div className="flex items-center">
 					{detailId && (
 						<button

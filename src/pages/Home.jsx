@@ -30,7 +30,7 @@ function HomePage() {
 	};
 
 	return (
-		<div className="flex flex-col">
+		<div className="flex flex-col space-y-7 pt-7">
 			{/* Unconnected Banner prompt */}
 			{!isAuthenticated ? (
 				<div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xs border border-blue-500/20 bg-linear-to-r from-blue-950/30 via-[#131722] to-[#121217] p-5 text-xs">

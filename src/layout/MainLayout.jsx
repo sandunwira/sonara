@@ -11,7 +11,7 @@ export default function MainLayout() {
 				<Sidebar />
 
 				{/* Scrollable Page Content */}
-				<main className="flex-1 overflow-y-auto bg-[#0a0a0d] p-5 lg:p-7">
+				<main className="flex-1 overflow-y-auto bg-[#0a0a0d] p-7 pt-0">
 					<Outlet />
 				</main>
 			</div>
