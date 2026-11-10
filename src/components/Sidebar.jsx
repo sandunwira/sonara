@@ -42,7 +42,7 @@ function Sidebar() {
 	return (
 		<aside className="flex h-full w-55 shrink-0 flex-col justify-between border-r border-[#1b1b22] bg-[#0d0d10] text-zinc-300">
 			{/* Top nav scrollable section */}
-			<div className="flex flex-1 flex-col overflow-y-auto px-3 py-3.5 space-y-3">
+			<div className="flex flex-1 flex-col overflow-y-auto p-4 space-y-3">
 				{/* Active Jellyfin server switcher */}
 				<ServerDropdown />
 
@@ -51,7 +51,7 @@ function Sidebar() {
 					<button
 						type="button"
 						onClick={() => setLibraryOpen(!libraryOpen)}
-						className="flex w-full items-center justify-between py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
+						className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
 					>
 						<span>My Library</span>
 						<IconChevronDown
@@ -74,7 +74,7 @@ function Sidebar() {
 										key={item.id}
 										type="button"
 										onClick={() => handleNavClick(item.path)}
-										className={`group flex w-full items-center gap-2.5 rounded-xs px-2.5 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
+										className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
 												? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
 												: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
 											}`}
@@ -98,7 +98,7 @@ function Sidebar() {
 
 				{/* Playlists Section */}
 				<div>
-					<div className="flex items-center justify-between py-1.5 text-xs font-semibold tracking-tight text-zinc-400">
+					<div className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400">
 						<span>Playlists</span>
 						<div className="flex items-center gap-1">
 							<button

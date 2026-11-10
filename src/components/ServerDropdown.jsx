@@ -75,7 +75,7 @@ function ServerDropdown() {
 				onClick={() => setIsOpen((open) => !open)}
 				aria-label="Switch Jellyfin server"
 				title="Switch Jellyfin server"
-				className="flex w-full items-center gap-2 rounded-xs text-left"
+				className="flex w-full items-center px-2 py-1.5 gap-2 rounded-xs text-left"
 			>
 				<span className="flex min-w-0 flex-1 items-center gap-1.5">
 					<ConnectionStatusIcon />
