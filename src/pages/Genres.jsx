@@ -16,6 +16,7 @@ export default function GenresPage() {
 			detailFilter="genreId"
 			detailPath="/genres"
 			entityList
+			genreCards
 		/>
 	);
 }

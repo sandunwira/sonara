@@ -20,6 +20,7 @@ export default function LibraryCollectionPage({
 	detailPath,
 	entityList = false,
 	isFolderList = false,
+	genreCards = false,
 }) {
 	const location = useLocation();
 	const navigate = useNavigate();
@@ -164,27 +165,48 @@ export default function LibraryCollectionPage({
 					</p>
 				</div>
 			) : entityList && !detailId ? (
-				<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-					{visibleItems.map((item) => (
-						<button
-							key={item.id}
-							type="button"
-							onClick={() => navigate(`${detailPath}/${item.id}`, { state: { title: item.title || item.name } })}
-							className="group min-w-0 text-left"
-						>
-							<div className={`relative aspect-square overflow-hidden rounded-xs border border-[#22222a] bg-[#141419] ${isFolderList ? "flex items-center justify-center" : ""}`}>
-								{isFolderList ? (
-									<Icon size={48} stroke={1.2} className="text-zinc-500 transition group-hover:text-blue-400" />
-								) : (
-									<Artwork src={item.cover} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-								)}
-							</div>
-							<span className="mt-2 block truncate text-xs font-semibold text-zinc-100 group-hover:text-white">
-								{item.title || item.name}
-							</span>
-						</button>
-					))}
-				</div>
+				genreCards ? (
+					<div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+						{visibleItems.map((genre) => (
+							<button
+								key={genre.id}
+								type="button"
+								onClick={() => navigate(`${detailPath}/${genre.id}`, { state: { title: genre.name } })}
+								className="group relative flex h-11 items-center overflow-hidden rounded-xs border border-[#22222b]/80 bg-[#141419] px-3 text-left transition-all duration-200 hover:border-zinc-700 hover:bg-[#1f1f28]"
+							>
+								<span
+									className="absolute bottom-0 left-0 top-0 w-1 rounded-l-xs transition-all group-hover:w-1.5"
+									style={{ backgroundColor: genre.color }}
+								/>
+								<span className="truncate pl-1.5 text-xs font-medium text-zinc-200 group-hover:text-white">
+									{genre.name}
+								</span>
+							</button>
+						))}
+					</div>
+				) : (
+					<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+						{visibleItems.map((item) => (
+							<button
+								key={item.id}
+								type="button"
+								onClick={() => navigate(`${detailPath}/${item.id}`, { state: { title: item.title || item.name } })}
+								className="group min-w-0 text-left"
+							>
+								<div className={`relative aspect-square overflow-hidden rounded-xs border border-[#22222a] bg-[#141419] ${isFolderList ? "flex items-center justify-center" : ""}`}>
+									{isFolderList ? (
+										<Icon size={48} stroke={1.2} className="text-zinc-500 transition group-hover:text-blue-400" />
+									) : (
+										<Artwork src={item.cover} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+									)}
+								</div>
+								<span className="mt-2 block truncate text-xs font-semibold text-zinc-100 group-hover:text-white">
+									{item.title || item.name}
+								</span>
+							</button>
+						))}
+					</div>
+				)
 			) : (
 				<div className="overflow-hidden rounded-xs border border-[#22222a] bg-[#101014]">
 					<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 border-b border-[#22222a] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]">
