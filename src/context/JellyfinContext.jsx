@@ -14,17 +14,25 @@ import { clearJellyfinCache } from "../services/jellyfinCache";
 const STORAGE_KEY = "sonara_jellyfin_session";
 const JellyfinContext = createContext();
 
-export function JellyfinProvider({ children }) {
-	const [session, setSession] = useState(() => {
-		try {
-			const saved = localStorage.getItem(STORAGE_KEY);
-			return saved ? JSON.parse(saved) : null;
-		} catch {
-			return null;
-		}
-	});
+function readSavedSession() {
+	try {
+		const saved = localStorage.getItem(STORAGE_KEY);
+		return saved ? JSON.parse(saved) : null;
+	} catch {
+		return null;
+	}
+}
 
-	const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+function isConfiguredSession(savedSession) {
+	return Boolean(savedSession?.accessToken && savedSession?.serverUrl && savedSession?.userId);
+}
+
+export function JellyfinProvider({ children }) {
+	const [session, setSession] = useState(readSavedSession);
+
+	const [isServerModalOpen, setIsServerModalOpen] = useState(
+		() => !isConfiguredSession(readSavedSession()),
+	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSyncingLibrary, setIsSyncingLibrary] = useState(false);
 	const [libraryVersion, setLibraryVersion] = useState(0);
@@ -210,7 +218,9 @@ export function JellyfinProvider({ children }) {
 				isLoading,
 				isServerModalOpen,
 				openServerModal: () => setIsServerModalOpen(true),
-				closeServerModal: () => setIsServerModalOpen(false),
+				closeServerModal: () => {
+					if (isAuthenticated) setIsServerModalOpen(false);
+				},
 				connectServer,
 				disconnectServer,
 				refreshLibrary: syncLibrary,

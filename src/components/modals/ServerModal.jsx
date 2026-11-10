@@ -76,14 +76,16 @@ export default function ServerModal() {
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Close Button */}
-				<button
-					type="button"
-					onClick={closeServerModal}
-					aria-label="Close"
-					className="absolute right-4 top-4 rounded-xs p-1.5 text-zinc-400 transition hover:bg-[#20202b] hover:text-white"
-				>
-					<IconX size={16} stroke={2} />
-				</button>
+				{isAuthenticated && (
+					<button
+						type="button"
+						onClick={closeServerModal}
+						aria-label="Close"
+						className="absolute right-4 top-4 rounded-xs p-1.5 text-zinc-400 transition hover:bg-[#20202b] hover:text-white"
+					>
+						<IconX size={16} stroke={2} />
+					</button>
+				)}
 
 				{/* Header */}
 				<div className="flex items-center gap-3">
