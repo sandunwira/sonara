@@ -10,7 +10,6 @@ export default function AlbumsPage() {
 	return (
 		<LibraryCollectionPage
 			title="Albums"
-			description="Albums from all your music libraries"
 			icon={IconDisc}
 			loadItems={loadAlbums}
 			detailId={albumId}

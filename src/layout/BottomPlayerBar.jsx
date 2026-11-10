@@ -117,7 +117,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 								disabled={upcomingTracks.length === 0}
 								title="Clear upcoming tracks"
 								aria-label="Clear upcoming tracks"
-								className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-zinc-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+								className="flex items-center gap-1 rounded-xs px-2 py-1 text-[11px] text-zinc-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
 							>
 								<IconTrash size={13} />
 								Clear
@@ -126,7 +126,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 								type="button"
 								onClick={() => setIsQueueOpen(false)}
 								aria-label="Close queue"
-								className="rounded p-1 text-zinc-400 hover:bg-white/5 hover:text-white"
+								className="rounded-xs p-1 text-zinc-400 hover:bg-white/5 hover:text-white"
 							>
 								<IconX size={15} />
 							</button>
@@ -139,11 +139,11 @@ function BottomPlayerBar({ onTrackOptions }) {
 								<p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
 									Now Playing
 								</p>
-								<div className="flex items-center gap-3 rounded bg-white/5 px-2 py-2">
+								<div className="flex items-center gap-3 rounded-xs bg-white/5 px-2 py-2">
 									<Artwork
 										src={currentTrack.cover}
 										alt=""
-										className="h-9 w-9 rounded object-cover"
+										className="h-9 w-9 rounded-xs object-cover"
 									/>
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-xs font-medium text-white">{currentTrack.title}</p>
@@ -171,7 +171,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 										return (
 											<li
 												key={`${track.id}-${index}`}
-												className="group flex items-center gap-2 rounded px-2 py-2 hover:bg-white/5"
+												className="group flex items-center gap-2 rounded-xs px-2 py-2 hover:bg-white/5"
 											>
 												<button
 													type="button"
@@ -182,7 +182,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 													<Artwork
 														src={track.cover}
 														alt=""
-														className="h-9 w-9 shrink-0 rounded object-cover"
+														className="h-9 w-9 shrink-0 rounded-xs object-cover"
 													/>
 													<span className="min-w-0 flex-1">
 														<span className="block truncate text-xs font-medium text-zinc-200">
@@ -199,7 +199,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 														onClick={() => moveQueuedTrack(index, index - 1)}
 														disabled={offset === 0}
 														aria-label={`Move ${track.title} up`}
-														className="rounded p-1 text-zinc-400 hover:text-white disabled:opacity-30"
+														className="rounded-xs p-1 text-zinc-400 hover:text-white disabled:opacity-30"
 													>
 														<IconChevronUp size={14} />
 													</button>
@@ -208,7 +208,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 														onClick={() => moveQueuedTrack(index, index + 1)}
 														disabled={offset === upcomingTracks.length - 1}
 														aria-label={`Move ${track.title} down`}
-														className="rounded p-1 text-zinc-400 hover:text-white disabled:opacity-30"
+														className="rounded-xs p-1 text-zinc-400 hover:text-white disabled:opacity-30"
 													>
 														<IconChevronDown size={14} />
 													</button>
@@ -216,7 +216,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 														type="button"
 														onClick={() => removeQueuedTrack(index)}
 														aria-label={`Remove ${track.title} from queue`}
-														className="rounded p-1 text-zinc-500 hover:text-red-400"
+														className="rounded-xs p-1 text-zinc-500 hover:text-red-400"
 													>
 														<IconX size={14} />
 													</button>
@@ -234,7 +234,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 			<div className="flex w-1/4 min-w-48 items-center gap-3">
 				{currentTrack ? (
 					<>
-						<div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-[#18181f] shadow-md border border-[#22222a]">
+						<div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-xs bg-[#18181f] shadow-md border border-[#22222a]">
 							<Artwork
 								src={currentTrack.cover}
 								alt={currentTrack.title}
@@ -271,7 +271,7 @@ function BottomPlayerBar({ onTrackOptions }) {
 					</>
 				) : (
 					<div className="flex items-center gap-2.5 text-zinc-500">
-						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#22222a] bg-[#141419]">
+						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xs border border-[#22222a] bg-[#141419]">
 							<IconMusic size={16} stroke={1.5} />
 						</div>
 						<div className="flex flex-col min-w-0">

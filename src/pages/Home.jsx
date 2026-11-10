@@ -33,9 +33,9 @@ function HomePage() {
 		<div className="flex flex-col">
 			{/* Unconnected Banner prompt */}
 			{!isAuthenticated ? (
-				<div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-blue-500/20 bg-linear-to-r from-blue-950/30 via-[#131722] to-[#121217] p-5 text-xs">
+				<div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xs border border-blue-500/20 bg-linear-to-r from-blue-950/30 via-[#131722] to-[#121217] p-5 text-xs">
 					<div className="flex items-center gap-3.5">
-						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/20 text-blue-400">
+						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xs bg-blue-500/20 text-blue-400">
 							<IconServer size={20} />
 						</div>
 						<div>
@@ -50,15 +50,15 @@ function HomePage() {
 					<button
 						type="button"
 						onClick={openServerModal}
-						className="shrink-0 flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-4 py-2.5 font-medium text-white shadow-md shadow-blue-600/30 transition hover:bg-blue-500 active:scale-95 cursor-pointer"
+						className="shrink-0 flex items-center justify-center gap-1.5 rounded-xs bg-blue-600 px-4 py-2.5 font-medium text-white shadow-md shadow-blue-600/30 transition hover:bg-blue-500 active:scale-95 cursor-pointer"
 					>
 						<IconSparkles size={14} />
 						Connect Server
 					</button>
 				</div>
 			) : tracks.length === 0 && !isLoading ? (
-				<div className="mb-6 flex flex-col items-center justify-center rounded-lg border border-[#22222a] bg-[#121217] p-8 text-center">
-					<div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 mb-3">
+				<div className="mb-6 flex flex-col items-center justify-center rounded-xs border border-[#22222a] bg-[#121217] p-8 text-center">
+					<div className="flex h-12 w-12 items-center justify-center rounded-xs bg-zinc-800 text-zinc-400 mb-3">
 						<IconMusic size={24} />
 					</div>
 					<h3 className="text-sm font-semibold text-zinc-100">
@@ -70,7 +70,7 @@ function HomePage() {
 					<button
 						type="button"
 						onClick={refreshLibrary}
-						className="flex items-center gap-1.5 rounded-md border border-[#2b2b35] bg-[#181820] px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-[#20202a] hover:text-white"
+						className="flex items-center gap-1.5 rounded-xs border border-[#2b2b35] bg-[#181820] px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-[#20202a] hover:text-white"
 					>
 						<IconRefresh size={14} />
 						Sync Library

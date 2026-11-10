@@ -10,7 +10,6 @@ export default function FoldersPage() {
 	return (
 		<LibraryCollectionPage
 			title="Folders"
-			description="Browse your music libraries"
 			icon={IconFolder}
 			loadItems={loadFolders}
 			detailId={libraryId}

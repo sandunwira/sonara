@@ -32,11 +32,11 @@ function GenresGrid({ genres, onSelectGenre, onViewMore }) {
 						key={genre.id}
 						type="button"
 						onClick={() => onSelectGenre && onSelectGenre(genre)}
-						className="group relative flex h-11 items-center overflow-hidden rounded-md border border-[#22222b]/80 bg-[#141419] px-3 transition-all duration-200 hover:bg-[#1f1f28] hover:border-zinc-700 text-left cursor-pointer"
+						className="group relative flex h-11 items-center overflow-hidden rounded-xs border border-[#22222b]/80 bg-[#141419] px-3 transition-all duration-200 hover:bg-[#1f1f28] hover:border-zinc-700 text-left cursor-pointer"
 					>
 						{/* Left colored accent pill */}
 						<div
-							className="absolute left-0 top-0 bottom-0 w-1 rounded-l-md transition-all group-hover:w-1.5"
+							className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xs transition-all group-hover:w-1.5"
 							style={{ backgroundColor: genre.color }}
 						/>
 

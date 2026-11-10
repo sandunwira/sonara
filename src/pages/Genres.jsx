@@ -10,7 +10,6 @@ export default function GenresPage() {
 	return (
 		<LibraryCollectionPage
 			title="Genres"
-			description="Browse tracks by genre"
 			icon={IconTag}
 			loadItems={loadGenres}
 			detailId={genreId}

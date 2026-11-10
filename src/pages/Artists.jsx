@@ -10,7 +10,6 @@ export default function ArtistsPage() {
 	return (
 		<LibraryCollectionPage
 			title="Artists"
-			description="Artists from your music libraries"
 			icon={IconUser}
 			loadItems={loadArtists}
 			detailId={artistId}

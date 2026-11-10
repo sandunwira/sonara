@@ -13,7 +13,6 @@ function formatDuration(seconds) {
 
 export default function LibraryCollectionPage({
 	title,
-	description,
 	icon: Icon,
 	loadItems,
 	detailId,
@@ -97,30 +96,25 @@ export default function LibraryCollectionPage({
 	return (
 		<div className="flex flex-col">
 			<header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-				<div className="flex items-center gap-3">
+				<div className="flex items-center">
 					{detailId && (
 						<button
 							type="button"
 							onClick={() => navigate(detailPath)}
 							aria-label={`Back to ${title}`}
-							className="flex h-8 w-8 items-center justify-center rounded-md border border-[#2b2b35] bg-[#141419] text-zinc-400 transition hover:bg-[#202028] hover:text-white"
+							className="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white"
 						>
 							<IconChevronLeft size={16} />
 						</button>
 					)}
-					<div className="flex h-10 w-10 items-center justify-center rounded-md border border-[#22222a] bg-[#141419] text-zinc-300">
-						<Icon size={19} stroke={1.7} />
-					</div>
-					<div>
+					<div className="flex items-center gap-2">
 						<div className="flex items-center gap-2">
+							<Icon size={19} stroke={1.7} />
 							<h1 className="text-xl font-bold tracking-tight text-white">{pageTitle}</h1>
-							<span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
-								{visibleItems.length}
-							</span>
 						</div>
-						<p className="mt-0.5 text-xs text-zinc-400">
-							{detailId ? `Browse ${title.toLowerCase()} tracks` : description}
-						</p>
+						<span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
+							{visibleItems.length}
+						</span>
 					</div>
 				</div>
 
@@ -132,7 +126,7 @@ export default function LibraryCollectionPage({
 							value={search}
 							onChange={(event) => setSearch(event.target.value)}
 							placeholder={`Search ${title.toLowerCase()}...`}
-							className="h-8 w-full rounded-md border border-[#2b2b35] bg-[#141419] pl-8 pr-3 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none sm:w-56"
+							className="h-8 w-full rounded-xs border border-[#2b2b35] bg-[#141419] pl-8 pr-3 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none sm:w-56"
 						/>
 					</div>
 				)}
@@ -140,7 +134,7 @@ export default function LibraryCollectionPage({
 
 			{!isAuthenticated ? (
 				<div className="flex flex-col items-center justify-center py-16 text-center">
-					<div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400">
+					<div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xs border border-blue-500/20 bg-blue-500/10 text-blue-400">
 						<IconServer size={24} />
 					</div>
 					<h2 className="text-sm font-semibold text-zinc-200">Server Not Connected</h2>
@@ -150,7 +144,7 @@ export default function LibraryCollectionPage({
 					<button
 						type="button"
 						onClick={openServerModal}
-						className="rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
+						className="rounded-xs bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
 					>
 						Connect Server
 					</button>
@@ -178,7 +172,7 @@ export default function LibraryCollectionPage({
 							onClick={() => navigate(`${detailPath}/${item.id}`, { state: { title: item.title || item.name } })}
 							className="group min-w-0 text-left"
 						>
-							<div className={`relative aspect-square overflow-hidden rounded-md border border-[#22222a] bg-[#141419] ${isFolderList ? "flex items-center justify-center" : ""}`}>
+							<div className={`relative aspect-square overflow-hidden rounded-xs border border-[#22222a] bg-[#141419] ${isFolderList ? "flex items-center justify-center" : ""}`}>
 								{isFolderList ? (
 									<Icon size={48} stroke={1.2} className="text-zinc-500 transition group-hover:text-blue-400" />
 								) : (
@@ -188,14 +182,11 @@ export default function LibraryCollectionPage({
 							<span className="mt-2 block truncate text-xs font-semibold text-zinc-100 group-hover:text-white">
 								{item.title || item.name}
 							</span>
-							<span className="block truncate text-[11px] text-zinc-500">
-								{isFolderList ? "Music library" : item.artist || title.slice(0, -1)}
-							</span>
 						</button>
 					))}
 				</div>
 			) : (
-				<div className="overflow-hidden rounded-md border border-[#22222a] bg-[#101014]">
+				<div className="overflow-hidden rounded-xs border border-[#22222a] bg-[#101014]">
 					<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 border-b border-[#22222a] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]">
 						<span className="hidden sm:block">#</span>
 						<span>Title</span>
@@ -212,7 +203,7 @@ export default function LibraryCollectionPage({
 						>
 							<span className="hidden text-[11px] text-zinc-600 sm:block">{index + 1}</span>
 							<span className="flex min-w-0 items-center gap-2">
-								<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />
+								<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
 								<span className="min-w-0">
 									<span className="block truncate text-xs font-medium text-zinc-200">{track.title}</span>
 									<span className="block truncate text-[10px] text-zinc-500 sm:hidden">{track.artist}</span>

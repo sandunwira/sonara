@@ -70,7 +70,7 @@ function Sidebar() {
 										key={item.id}
 										type="button"
 										onClick={() => handleNavClick(item.path)}
-										className={`group flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
+										className={`group flex w-full items-center gap-2.5 rounded-xs px-2.5 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
 												? "text-blue-500 font-semibold bg-blue-500/10"
 												: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
 											}`}
@@ -100,14 +100,14 @@ function Sidebar() {
 							<button
 								type="button"
 								aria-label="Add Playlist"
-								className="rounded p-0.5 text-zinc-400 hover:bg-[#1a1a22] hover:text-zinc-200"
+								className="rounded-xs p-0.5 text-zinc-400 hover:bg-[#1a1a22] hover:text-zinc-200"
 							>
 								<IconPlus size={13} stroke={2} />
 							</button>
 							<button
 								type="button"
 								aria-label="Playlist Options"
-								className="rounded p-0.5 text-zinc-400 hover:bg-[#1a1a22] hover:text-zinc-200"
+								className="rounded-xs p-0.5 text-zinc-400 hover:bg-[#1a1a22] hover:text-zinc-200"
 							>
 								<IconList size={13} stroke={2} />
 							</button>
@@ -118,7 +118,7 @@ function Sidebar() {
 
 			{/* Bottom Jellyfin Server Connection Bar */}
 			<div className="border-t border-[#1b1b22] bg-[#0c0c0f] p-2.5">
-				<div className={`flex w-full items-center gap-1 rounded-md border p-1 transition ${isAuthenticated
+				<div className={`flex w-full items-center gap-1 rounded-xs border p-1 transition ${isAuthenticated
 						? "border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-zinc-200"
 						: "border-zinc-800 bg-[#141419] hover:bg-[#1c1c24] text-zinc-300"
 						}`}
@@ -126,7 +126,7 @@ function Sidebar() {
 					<button
 						type="button"
 						onClick={openServerModal}
-						className="flex min-w-0 flex-1 items-center justify-between rounded p-1.5 text-left"
+						className="flex min-w-0 flex-1 items-center justify-between rounded-xs p-1.5 text-left"
 					>
 						<div className="flex min-w-0 items-center gap-2">
 							<IconServer
@@ -155,7 +155,7 @@ function Sidebar() {
 							disabled={isSyncingLibrary}
 							title="Sync Library"
 							aria-label="Sync Library"
-							className="shrink-0 rounded p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+							className="shrink-0 rounded-xs p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							<IconRefresh size={14} className={isSyncingLibrary ? "animate-spin" : ""} />
 						</button>

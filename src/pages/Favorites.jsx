@@ -13,7 +13,6 @@ export default function FavoritesPage() {
 	return (
 		<LibraryCollectionPage
 			title="Favourites"
-			description="Your favourite tracks from across your libraries"
 			icon={IconHeart}
 			loadItems={loadFavorites}
 		/>

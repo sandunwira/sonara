@@ -8,7 +8,6 @@ export default function TracksPage() {
 	return (
 		<LibraryCollectionPage
 			title="Tracks"
-			description="All tracks across every music library"
 			icon={IconMusic}
 			loadItems={loadTracks}
 		/>

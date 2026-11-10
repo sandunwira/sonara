@@ -66,7 +66,7 @@ function AlbumCarousel({
 						onClick={onRefresh}
 						aria-label={`Refresh ${title}`}
 						disabled={!onRefresh || isRefreshing}
-						className="rounded p-0.5 text-zinc-400 hover:text-white transition disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+						className="rounded-xs p-0.5 text-zinc-400 hover:text-white transition disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
 					>
 						<IconRefresh
 							size={12}
@@ -81,7 +81,7 @@ function AlbumCarousel({
 						type="button"
 						onClick={scrollLeft}
 						aria-label="Scroll left"
-						className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:text-white transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+						className="flex h-5 w-5 items-center justify-center rounded-xs text-zinc-400 hover:text-white transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
 					>
 						<IconChevronLeft size={14} stroke={2} />
 					</button>
@@ -89,7 +89,7 @@ function AlbumCarousel({
 						type="button"
 						onClick={scrollRight}
 						aria-label="Scroll right"
-						className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:text-white transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+						className="flex h-5 w-5 items-center justify-center rounded-xs text-zinc-400 hover:text-white transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
 					>
 						<IconChevronRight size={14} stroke={2} />
 					</button>
