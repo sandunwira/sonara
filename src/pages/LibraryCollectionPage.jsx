@@ -67,7 +67,11 @@ export default function LibraryCollectionPage({
 				if (!cancelled) setItems(data);
 			} catch (loadError) {
 				console.error(`Failed to load ${title.toLowerCase()}:`, loadError);
-				if (!cancelled) setError(`Could not load ${title.toLowerCase()}. Please try again.`);
+				if (!cancelled) {
+					setError(navigator.onLine
+						? `Could not load ${title.toLowerCase()}. Please try again.`
+						: "You are offline and this section was not cached. Connect to the server and sync your library.");
+				}
 			} finally {
 				if (!cancelled) setIsLoading(false);
 			}

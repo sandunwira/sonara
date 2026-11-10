@@ -3,6 +3,11 @@
 	"productName": "Sonara",
 	"version": "0.1.0",
 	"identifier": "Sonara",
+	"plugins": {
+		"sql": {
+			"preload": ["sqlite:sonara_cache.db"]
+		}
+	},
 	"build": {
 		"beforeDevCommand": "npm run dev",
 		"devUrl": "http://localhost:1420",
@@ -13,7 +18,7 @@
 	"app": {
 		"security": {
 			"csp": null,
-			"capabilities": []
+			"capabilities": ["default", "desktop-capability"]
 		},
 		"windows": [
 			{

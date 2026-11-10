@@ -1,5 +1,13 @@
-// Client identification required by Jellyfin
-import { fetchCachedJellyfinJson } from "./jellyfinCache";
+import {
+	fetchCachedJellyfinJson,
+	getCachedJellyfinItems,
+	readJellyfinCacheEntry,
+	isJellyfinLibrarySynced,
+	markJellyfinLibrarySynced,
+	startJellyfinSyncCapture,
+	cancelJellyfinSyncCapture,
+	finishJellyfinSyncCapture,
+} from "./jellyfinCache";
 
 const CLIENT_NAME = "Sonara";
 const CLIENT_VERSION = "0.1.0";
@@ -126,15 +134,19 @@ export async function fetchMusicCollection(serverUrl, userId, token, {
 	sortBy = "SortName",
 	sortOrder = "Ascending",
 	formatEntities = false,
-	forceRefresh = false,
+forceRefresh = false,
 } = {}) {
-	const base = cleanUrl(serverUrl);
-	const items = [];
-	const limit = 200;
-	let startIndex = 0;
-	let totalRecordCount = Infinity;
+const base = cleanUrl(serverUrl);
+const items = [];
+const limit = 200;
+let startIndex = 0;
+let totalRecordCount = Infinity;
+// Cached fallback now also covers unfiltered fetches (albums, all tracks,
+// etc.) whenever the library has been synced at least once.
+const canUseSyncedData = !forceRefresh
+	&& await isJellyfinLibrarySynced(base, userId);
 
-	while (startIndex < totalRecordCount) {
+while (startIndex < totalRecordCount) {
 		const params = new URLSearchParams({
 			userId,
 			Recursive: "true",
@@ -143,18 +155,47 @@ export async function fetchMusicCollection(serverUrl, userId, token, {
 			SortOrder: sortOrder,
 			StartIndex: String(startIndex),
 			Limit: String(limit),
-			Fields: "MediaSources,MediaStreams,PrimaryImageAspectRatio,Genres,AlbumId,Artists",
+			Fields: "MediaSources,MediaStreams,PrimaryImageAspectRatio,Genres,GenreItems,AlbumId,ArtistItems,Artists,UserData,Path",
 		});
 		if (parentId) params.set("ParentId", parentId);
 		if (artistId) params.set("ArtistIds", artistId);
 		if (genreId) params.set("GenreIds", genreId);
 		if (isFavorite !== undefined) params.set("IsFavorite", String(isFavorite));
 
-		const res = await fetchCachedJellyfinJson(
-			`${base}/Users/${userId}/Items?${params}`,
-			getAuthHeaders(token),
-			{ forceRefresh },
-		);
+		let res;
+		try {
+			res = await fetchCachedJellyfinJson(
+				`${base}/Users/${userId}/Items?${params}`,
+				getAuthHeaders(token),
+				{ forceRefresh },
+			);
+		} catch (error) {
+			if (!canUseSyncedData) throw error;
+
+			const cachedItems = await getCachedJellyfinItems(base, userId);
+			const libraries = parentId
+				? cachedItems.filter((item) => item.Id === parentId && item.Type === "CollectionFolder")
+				: [];
+			const libraryPath = libraries[0]?.Path?.replace(/[\\/]+$/, "").toLowerCase();
+			const filteredItems = cachedItems.filter((item) => {
+				if (!includeItemTypes.includes(item.Type)) return false;
+				if (parentId) {
+					const isAlbumTrack = item.AlbumId === parentId;
+					const isLibraryTrack = item.ParentId === parentId
+						|| (libraryPath && item.Path?.toLowerCase().startsWith(`${libraryPath}\\`));
+					if (!isAlbumTrack && !isLibraryTrack) return false;
+				}
+				if (artistId && !item.ArtistItems?.some((artist) => artist.Id === artistId)) return false;
+				if (genreId && !item.GenreItems?.some((genre) => genre.Id === genreId)) return false;
+				if (isFavorite !== undefined && Boolean(item.UserData?.IsFavorite) !== isFavorite) return false;
+				return true;
+			});
+			return filteredItems.map((item) => (
+				formatEntities
+					? formatJellyfinEntity(base, item, token)
+					: formatJellyfinTrack(base, item, token, userId)
+			));
+		}
 		if (!res.ok) {
 			throw new Error(`Failed to fetch music collection (${res.status})`);
 		}
@@ -174,10 +215,11 @@ export async function fetchMusicCollection(serverUrl, userId, token, {
 	));
 }
 
-export async function fetchMusicAlbums(serverUrl, userId, token) {
+export async function fetchMusicAlbums(serverUrl, userId, token, { forceRefresh = false } = {}) {
 	const albums = await fetchMusicCollection(serverUrl, userId, token, {
 		includeItemTypes: ["MusicAlbum"],
 		formatEntities: true,
+		forceRefresh,
 	});
 	if (albums.length > 0) return albums;
 
@@ -187,12 +229,13 @@ export async function fetchMusicAlbums(serverUrl, userId, token) {
 			parentId: library.id,
 			includeItemTypes: ["MusicAlbum"],
 			formatEntities: true,
+			forceRefresh,
 		}),
 	));
 	return [...new Map(albumsByLibrary.flat().map((album) => [album.id, album])).values()];
 }
 
-export async function fetchMusicArtists(serverUrl, userId, token) {
+export async function fetchMusicArtists(serverUrl, userId, token, { forceRefresh = false } = {}) {
 	const base = cleanUrl(serverUrl);
 	const params = new URLSearchParams({
 		userId,
@@ -200,7 +243,16 @@ export async function fetchMusicArtists(serverUrl, userId, token) {
 		SortOrder: "Ascending",
 		EnableImages: "true",
 	});
-	const res = await fetchCachedJellyfinJson(`${base}/Artists?${params}`, getAuthHeaders(token));
+	let res;
+	try {
+		res = await fetchCachedJellyfinJson(`${base}/Artists?${params}`, getAuthHeaders(token), { forceRefresh });
+	} catch (error) {
+		if (forceRefresh || !await isJellyfinLibrarySynced(base, userId)) throw error;
+		const cachedItems = await getCachedJellyfinItems(base, userId);
+		const artists = cachedItems.filter((item) => item.Type === "MusicArtist");
+		if (artists.length === 0) throw error;
+		return artists.map((item) => formatJellyfinEntity(base, item, token));
+	}
 	if (!res.ok) {
 		throw new Error(`Failed to fetch artists (${res.status})`);
 	}
@@ -208,10 +260,20 @@ export async function fetchMusicArtists(serverUrl, userId, token) {
 	return (data.Items || []).map((item) => formatJellyfinEntity(base, item, token));
 }
 
-export async function fetchMusicLibraries(serverUrl, userId, token) {
+export async function fetchMusicLibraries(serverUrl, userId, token, { forceRefresh = false } = {}) {
 	const base = cleanUrl(serverUrl);
 	const params = new URLSearchParams({ userId });
-	const res = await fetchCachedJellyfinJson(`${base}/UserViews?${params}`, getAuthHeaders(token));
+	let res;
+	try {
+		res = await fetchCachedJellyfinJson(`${base}/UserViews?${params}`, getAuthHeaders(token), { forceRefresh });
+	} catch (error) {
+		if (forceRefresh || !await isJellyfinLibrarySynced(base, userId)) throw error;
+		const cachedItems = await getCachedJellyfinItems(base, userId);
+		const libraries = cachedItems.filter((item) => item.Type === "CollectionFolder"
+			&& (!item.CollectionType || item.CollectionType === "music"));
+		if (libraries.length === 0) throw error;
+		return libraries.map((item) => formatJellyfinEntity(base, item, token));
+	}
 	if (!res.ok) {
 		throw new Error(`Failed to fetch music libraries (${res.status})`);
 	}
@@ -221,10 +283,27 @@ export async function fetchMusicLibraries(serverUrl, userId, token) {
 		.map((item) => formatJellyfinEntity(base, item, token));
 }
 
-export async function fetchMusicItem(serverUrl, userId, token, itemId) {
+export async function fetchMusicItem(serverUrl, userId, token, itemId, { forceRefresh = false } = {}) {
 	const base = cleanUrl(serverUrl);
 	const params = new URLSearchParams({ userId });
-	const res = await fetchCachedJellyfinJson(`${base}/Items/${itemId}?${params}`, getAuthHeaders(token));
+	let res;
+	try {
+		res = await fetchCachedJellyfinJson(
+			`${base}/Items/${itemId}?${params}`,
+			getAuthHeaders(token),
+			{ forceRefresh },
+		);
+	} catch (error) {
+		if (!forceRefresh && await isJellyfinLibrarySynced(base, userId)) {
+			const cachedItem = (await getCachedJellyfinItems(base, userId)).find((item) => item.Id === itemId);
+			if (cachedItem) {
+				return cachedItem.Type === "Audio"
+					? formatJellyfinTrack(base, cachedItem, token, userId)
+					: formatJellyfinEntity(base, cachedItem, token);
+			}
+		}
+		throw error;
+	}
 	if (!res.ok) {
 		throw new Error(`Failed to fetch music item (${res.status})`);
 	}
@@ -237,7 +316,19 @@ export async function fetchMusicItem(serverUrl, userId, token, itemId) {
 export async function fetchMusicGenres(serverUrl, userId, token, options = {}) {
 	const base = cleanUrl(serverUrl);
 	const url = `${base}/MusicGenres?userId=${userId}`;
-	const res = await fetchCachedJellyfinJson(url, getAuthHeaders(token), options);
+	let res;
+	try {
+		res = await fetchCachedJellyfinJson(url, getAuthHeaders(token), options);
+	} catch (error) {
+		if (options.forceRefresh || !await isJellyfinLibrarySynced(base, userId)) throw error;
+		const data = await readJellyfinCacheEntry(url);
+		if (!data?.Items?.length) throw error;
+		return data.Items.map((genre) => ({
+			id: genre.Id,
+			name: genre.Name,
+			color: getRandomGenreColor(genre.Name),
+		}));
+	}
 
 	if (!res.ok) {
 		throw new Error(`Failed to fetch music genres (${res.status})`);
@@ -249,6 +340,52 @@ export async function fetchMusicGenres(serverUrl, userId, token, options = {}) {
 		name: genre.Name,
 		color: getRandomGenreColor(genre.Name),
 	}));
+}
+
+export async function syncJellyfinLibrary(serverUrl, userId, token) {
+	const base = cleanUrl(serverUrl);
+	startJellyfinSyncCapture();
+	try {
+		const results = await Promise.all([
+			fetchMusicCollection(base, userId, token, { forceRefresh: true }),
+			fetchUserMusic(base, userId, token, 50, { forceRefresh: true }),
+			fetchRecentlyPlayed(base, userId, token, 50, { forceRefresh: true }),
+			fetchMusicCollection(base, userId, token, {
+				includeItemTypes: ["MusicAlbum"],
+				formatEntities: true,
+				forceRefresh: true,
+			}),
+			fetchMusicCollection(base, userId, token, { isFavorite: true, forceRefresh: true }),
+			fetchMusicArtists(base, userId, token, { forceRefresh: true }),
+			fetchMusicLibraries(base, userId, token, { forceRefresh: true }),
+			fetchMusicGenres(base, userId, token, { forceRefresh: true }),
+		]);
+		const libraries = results[6];
+		await Promise.all(libraries.map((library) =>
+			Promise.all([
+				fetchMusicCollection(base, userId, token, {
+					parentId: library.id,
+					forceRefresh: true,
+				}),
+				fetchMusicCollection(base, userId, token, {
+					parentId: library.id,
+					includeItemTypes: ["MusicAlbum"],
+					formatEntities: true,
+					forceRefresh: true,
+				}),
+			]),
+		));
+		await markJellyfinLibrarySynced(base, userId);
+		// Every cached response that was not rewritten during this sync belongs
+		// to an older browsing state, so drop it to keep filtered/detail pages
+		// consistent with the freshly synced data.
+		const purgeSummary = await finishJellyfinSyncCapture(base);
+		return purgeSummary;
+	} finally {
+		// On a failed sync the capture is discarded so valid cached data is
+		// never purged while the server is unreachable.
+		cancelJellyfinSyncCapture();
+	}
 }
 
 export async function markItemPlayed(serverUrl, userId, itemId, token) {

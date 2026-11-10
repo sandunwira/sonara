@@ -8,6 +8,7 @@ import WindowFunctionalities from './utils/WindowFunctionalities';
 import { PlayerProvider } from './context/PlayerContext';
 import { JellyfinProvider } from './context/JellyfinContext';
 import ServerModal from './components/modals/ServerModal';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 import HomePage from "./pages/Home";
 import FavoritesPage from "./pages/Favorites";
@@ -57,7 +58,9 @@ function App() {
 	return (
 		<>
 			<div className="fixed top-0 left-0 w-screen h-screen">
-				<AppRoutes />
+				<AppErrorBoundary>
+					<AppRoutes />
+				</AppErrorBoundary>
 			</div>
 
 			<Toaster

@@ -2,46 +2,39 @@ import { createContext, useContext, useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
 import { useJellyfin } from "./JellyfinContext";
 import { getAudioStreamUrl, getImageUrl } from "../services/jellyfin";
+import { getStoredPlayerQueue, saveStoredPlayerQueue, recordAppLog } from "../services/jellyfinCache";
 
 const PlayerContext = createContext();
-const PLAYER_QUEUE_STORAGE_KEY = "sonara_player_queue";
 
-function restoreSavedQueue(session) {
-	try {
-		const saved = JSON.parse(localStorage.getItem(PLAYER_QUEUE_STORAGE_KEY) || "null");
-		if (!saved || !Array.isArray(saved.queue)) {
-			return { queue: [], queueIndex: -1, currentTrack: null };
-		}
-
-		const queue = saved.queue
-			.filter((track) => track?.id)
-			.map((track) => ({
-				...track,
-				cover: session?.serverUrl && session?.accessToken
-					? getImageUrl(session.serverUrl, track.id, session.accessToken)
-					: track.cover,
-				streamUrl: session?.serverUrl && session?.accessToken
-					? getAudioStreamUrl(session.serverUrl, track.id, session.accessToken, session.userId)
-					: "",
-			}));
-		const queueIndex = Number.isInteger(saved.queueIndex)
-			? Math.min(Math.max(saved.queueIndex, -1), queue.length - 1)
-			: -1;
-		const currentTrack = saved.currentTrackId && queue[queueIndex]?.id === saved.currentTrackId
-			? queue[queueIndex]
-			: null;
-
-		return { queue, queueIndex, currentTrack };
-	} catch (error) {
-		console.error("Could not restore saved playback queue:", error);
+function restoreSavedQueue(saved, session) {
+	if (!saved || !Array.isArray(saved.queue)) {
 		return { queue: [], queueIndex: -1, currentTrack: null };
 	}
+
+	const queue = saved.queue
+		.filter((track) => track?.id)
+		.map((track) => ({
+			...track,
+			cover: session?.serverUrl && session?.accessToken
+				? getImageUrl(session.serverUrl, track.id, session.accessToken)
+				: track.cover,
+			streamUrl: session?.serverUrl && session?.accessToken
+				? getAudioStreamUrl(session.serverUrl, track.id, session.accessToken, session.userId)
+				: "",
+		}));
+	const queueIndex = Number.isInteger(saved.queueIndex)
+		? Math.min(Math.max(saved.queueIndex, -1), queue.length - 1)
+		: -1;
+	const currentTrack = saved.currentTrackId && queue[queueIndex]?.id === saved.currentTrackId
+		? queue[queueIndex]
+		: null;
+
+	return { queue, queueIndex, currentTrack };
 }
 
 export function PlayerProvider({ children }) {
-	const { session, reportTrackPlayed, reportPlaybackEvent } = useJellyfin();
-	const [savedPlayback] = useState(() => restoreSavedQueue(session));
-	const [currentTrack, setCurrentTrack] = useState(savedPlayback.currentTrack);
+	const { session, isSessionLoaded, reportTrackPlayed, reportPlaybackEvent } = useJellyfin();
+	const [currentTrack, setCurrentTrack] = useState(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [currentTime, setCurrentTime] = useState(0);
 	const [duration, setDuration] = useState(0);
@@ -49,10 +42,11 @@ export function PlayerProvider({ children }) {
 	const [isMuted, setIsMuted] = useState(false);
 	const [isShuffle, setIsShuffle] = useState(false);
 	const [isRepeat, setIsRepeat] = useState(false);
-	const [queue, setQueue] = useState(savedPlayback.queue);
-	const [queueIndex, setQueueIndex] = useState(savedPlayback.queueIndex);
+	const [queue, setQueue] = useState([]);
+	const [queueIndex, setQueueIndex] = useState(-1);
 
 	const currentTrackRef = useRef(currentTrack);
+	const queueRestoredRef = useRef(false);
 	const queueRef = useRef(queue);
 	const queueIndexRef = useRef(queueIndex);
 	const isRepeatRef = useRef(isRepeat);
@@ -78,18 +72,45 @@ export function PlayerProvider({ children }) {
 	};
 
 	useEffect(() => {
-		try {
-			localStorage.setItem(PLAYER_QUEUE_STORAGE_KEY, JSON.stringify({
-				queue: queue.map(({ id, title, artist, album, albumId, duration, isJellyfin }) => ({
-					id, title, artist, album, albumId, duration, isJellyfin,
-				})),
-				queueIndex,
-				currentTrackId: currentTrack?.id || null,
-			}));
-		} catch (error) {
-			console.error("Could not save playback queue:", error);
+		if (!isSessionLoaded || !session || queueRestoredRef.current) return undefined;
+
+		let cancelled = false;
+		getStoredPlayerQueue()
+			.then((saved) => {
+				if (cancelled) return;
+				const restored = restoreSavedQueue(saved, session);
+				queueRestoredRef.current = true;
+				queueRef.current = restored.queue;
+				queueIndexRef.current = restored.queueIndex;
+				currentTrackRef.current = restored.currentTrack;
+				setQueue(restored.queue);
+				setQueueIndex(restored.queueIndex);
+				setCurrentTrack(restored.currentTrack);
+			})
+			.catch((error) => {
+				console.error("Could not restore saved playback queue from the database:", error);
+				queueRestoredRef.current = true;
+				toast.error("Could not restore saved playback queue");
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [isSessionLoaded, session]);
+
+	useEffect(() => {
+		if (!queueRestoredRef.current) return;
+
+		saveStoredPlayerQueue({
+			queue: queue.map(({ id, title, artist, album, albumId, duration, isJellyfin }) => ({
+				id, title, artist, album, albumId, duration, isJellyfin,
+			})),
+			queueIndex,
+			currentTrackId: currentTrack?.id || null,
+		}).catch((error) => {
+			console.error("Could not save playback queue to the database:", error);
 			toast.error("Could not save playback queue");
-		}
+		});
 	}, [queue, queueIndex, currentTrack]);
 
 	const getPlaybackState = (isPaused) => {
@@ -216,6 +237,13 @@ export function PlayerProvider({ children }) {
 						errorMessage = audio.error.message || errorMessage;
 				}
 			}
+			recordAppLog("error", "audio", "Audio playback failed", {
+				trackTitle: currentTrackRef.current?.title || null,
+				trackId: currentTrackRef.current?.id || null,
+				errorCode: audio.error?.code ?? null,
+				message: errorMessage,
+				src: audio.src,
+			});
 			toast.error(errorMessage);
 			setIsPlaying(false);
 			stopPlaybackReporting();
@@ -277,6 +305,10 @@ export function PlayerProvider({ children }) {
 					})
 					.catch((err) => {
 						console.error("Audio play error:", err);
+						recordAppLog("error", "audio", `Could not play "${track.title}"`, {
+							trackId: track.id,
+							message: err?.message || String(err),
+						});
 						toast.error(`Could not play "${track.title}"`);
 						setIsPlaying(false);
 					});
@@ -413,6 +445,10 @@ export function PlayerProvider({ children }) {
 						})
 						.catch((err) => {
 							console.error("Audio play error:", err);
+							recordAppLog("error", "audio", "Unable to resume audio playback", {
+								trackId: currentTrack?.id || null,
+								message: err?.message || String(err),
+							});
 							toast.error("Unable to play audio");
 							setIsPlaying(false);
 						});

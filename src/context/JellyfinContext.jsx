@@ -7,32 +7,26 @@ import {
 	fetchRecentlyPlayed,
 	fetchMusicGenres,
 	markItemPlayed,
+	syncJellyfinLibrary,
 	reportPlaybackEvent as sendPlaybackEvent,
 } from "../services/jellyfin";
-import { clearJellyfinCache } from "../services/jellyfinCache";
+import {
+	getStoredJellyfinSession,
+	removeStoredJellyfinSession,
+	recordAppLog,
+	saveStoredJellyfinSession,
+} from "../services/jellyfinCache";
 
-const STORAGE_KEY = "sonara_jellyfin_session";
 const JellyfinContext = createContext();
-
-function readSavedSession() {
-	try {
-		const saved = localStorage.getItem(STORAGE_KEY);
-		return saved ? JSON.parse(saved) : null;
-	} catch {
-		return null;
-	}
-}
 
 function isConfiguredSession(savedSession) {
 	return Boolean(savedSession?.accessToken && savedSession?.serverUrl && savedSession?.userId);
 }
 
 export function JellyfinProvider({ children }) {
-	const [session, setSession] = useState(readSavedSession);
-
-	const [isServerModalOpen, setIsServerModalOpen] = useState(
-		() => !isConfiguredSession(readSavedSession()),
-	);
+	const [session, setSession] = useState(null);
+	const [isSessionLoaded, setIsSessionLoaded] = useState(false);
+	const [isServerModalOpen, setIsServerModalOpen] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSyncingLibrary, setIsSyncingLibrary] = useState(false);
 	const [libraryVersion, setLibraryVersion] = useState(0);
@@ -41,8 +35,72 @@ export function JellyfinProvider({ children }) {
 	const [tracks, setTracks] = useState([]);
 	const [recentlyPlayed, setRecentlyPlayed] = useState([]);
 	const [genres, setGenres] = useState([]);
+	const [isOffline, setIsOffline] = useState(false);
 
 	const isAuthenticated = Boolean(session?.accessToken && session?.serverUrl && session?.userId);
+
+	useEffect(() => {
+		recordAppLog("info", "application", "Sonara started");
+		const handleError = (event) => {
+			recordAppLog("error", "renderer", event.message || "Uncaught application error", {
+				filename: event.filename,
+				line: event.lineno,
+				column: event.colno,
+				stack: event.error?.stack,
+			});
+		};
+		const handleRejection = (event) => {
+			const reason = event.reason;
+			recordAppLog("error", "renderer", "Unhandled promise rejection", {
+				reason: reason?.message || String(reason),
+				stack: reason?.stack,
+			});
+		};
+		window.addEventListener("error", handleError);
+		window.addEventListener("unhandledrejection", handleRejection);
+
+		// Track connectivity so the UI can fall back to the cached library
+		// and every transition is recorded in the application logs.
+		setIsOffline(!navigator.onLine);
+		const handleOffline = () => {
+			setIsOffline(true);
+			recordAppLog("warning", "network", "Network went offline; showing cached library data");
+			toast("You are offline - showing last synced", { icon: "📡" });
+		};
+		const handleOnline = () => {
+			setIsOffline(false);
+			recordAppLog("info", "network", "Network connection restored");
+			toast.success("Back online");
+		};
+		window.addEventListener("offline", handleOffline);
+		window.addEventListener("online", handleOnline);
+
+		let cancelled = false;
+		getStoredJellyfinSession()
+			.then((savedSession) => {
+				if (cancelled) return;
+				if (isConfiguredSession(savedSession)) {
+					setSession(savedSession);
+				} else {
+					setIsServerModalOpen(true);
+				}
+			})
+			.catch((error) => {
+				console.error("Could not load the saved Jellyfin session from the database:", error);
+				if (!cancelled) setIsServerModalOpen(true);
+			})
+			.finally(() => {
+				if (!cancelled) setIsSessionLoaded(true);
+			});
+
+		return () => {
+			cancelled = true;
+			window.removeEventListener("error", handleError);
+			window.removeEventListener("unhandledrejection", handleRejection);
+			window.removeEventListener("offline", handleOffline);
+			window.removeEventListener("online", handleOnline);
+		};
+	}, []);
 
 	// Load user music when authenticated
 	const loadLibrary = useCallback(async (currentSession = session, { forceRefresh = false } = {}) => {
@@ -121,6 +179,10 @@ export function JellyfinProvider({ children }) {
 			return true;
 		} catch (error) {
 			console.error("Failed to update recently played history:", error);
+			recordAppLog("error", "jellyfin-playback", "Could not update recently played history", {
+				message: error.message,
+				itemId,
+			});
 			toast.error("Could not update recently played history");
 			return false;
 		}
@@ -134,16 +196,20 @@ export function JellyfinProvider({ children }) {
 
 		setIsSyncingLibrary(true);
 		try {
-			await clearJellyfinCache();
+			const purgeSummary = await syncJellyfinLibrary(session.serverUrl, session.userId, session.accessToken);
 			setLibraryVersion((version) => version + 1);
-			const synced = await loadLibrary(session, { forceRefresh: true });
-			if (synced) {
-				toast.success("Library synced");
-			} else {
-				toast.error("Some library data could not be synced");
-			}
+			await loadLibrary(session);
+			await recordAppLog("info", "library-sync", "Jellyfin library sync completed", {
+				serverUrl: session.serverUrl,
+				userId: session.userId,
+				removedStaleCacheEntries: purgeSummary?.removedStaleEntries ?? 0,
+			});
+			toast.success("Library synced");
 		} catch (error) {
 			console.error("Failed to sync Jellyfin library:", error);
+			await recordAppLog("error", "library-sync", "Jellyfin library sync failed", {
+				message: error.message,
+			});
 			toast.error("Could not sync library");
 		} finally {
 			setIsSyncingLibrary(false);
@@ -157,6 +223,10 @@ export function JellyfinProvider({ children }) {
 			return true;
 		} catch (error) {
 			console.error(`Failed to report Jellyfin playback ${event}:`, error);
+			recordAppLog("error", "jellyfin-playback", `Could not report playback ${event}`, {
+				message: error.message,
+				itemId,
+			});
 			return false;
 		}
 	}, [session]);
@@ -182,7 +252,11 @@ export function JellyfinProvider({ children }) {
 				serverVersion: serverInfo.Version,
 			};
 
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
+			await saveStoredJellyfinSession(newSession);
+			await recordAppLog("info", "jellyfin", "Connected to Jellyfin server", {
+				serverUrl: newSession.serverUrl,
+				userId: newSession.userId,
+			});
 			setSession(newSession);
 
 			toast.success(`Connected to ${newSession.serverName}!`);
@@ -193,6 +267,9 @@ export function JellyfinProvider({ children }) {
 			return { success: true };
 		} catch (error) {
 			console.error("Jellyfin connection error:", error);
+			await recordAppLog("error", "jellyfin", "Jellyfin connection failed", {
+				message: error.message,
+			});
 			const message = error.message || "Failed to connect to Jellyfin server";
 			toast.error(message);
 			return { success: false, error: message };
@@ -201,9 +278,16 @@ export function JellyfinProvider({ children }) {
 		}
 	};
 
-	const disconnectServer = () => {
-		localStorage.removeItem(STORAGE_KEY);
+	const disconnectServer = async () => {
+		try {
+			await removeStoredJellyfinSession();
+		} catch (error) {
+			console.error("Could not remove the saved Jellyfin session:", error);
+			toast.error("Could not disconnect from Jellyfin");
+			return;
+		}
 		setSession(null);
+		setIsServerModalOpen(true);
 		setTracks([]);
 		setRecentlyPlayed([]);
 		setGenres([]);
@@ -214,6 +298,7 @@ export function JellyfinProvider({ children }) {
 		<JellyfinContext.Provider
 			value={{
 				session,
+				isSessionLoaded,
 				isAuthenticated,
 				isLoading,
 				isServerModalOpen,
@@ -227,6 +312,7 @@ export function JellyfinProvider({ children }) {
 				syncLibrary,
 				isSyncingLibrary,
 				libraryVersion,
+				isOffline,
 				refreshMostPlayed,
 				refreshRecentlyPlayed,
 				reportTrackPlayed,

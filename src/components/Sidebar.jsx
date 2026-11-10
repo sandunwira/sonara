@@ -20,7 +20,7 @@ function Sidebar() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const [libraryOpen, setLibraryOpen] = useState(true);
-	const { isAuthenticated, session, openServerModal, syncLibrary, isSyncingLibrary } = useJellyfin();
+	const { isAuthenticated, session, openServerModal, syncLibrary, isSyncingLibrary, isOffline } = useJellyfin();
 
 	const navItems = [
 		{ id: "home", label: "Home", icon: IconHome, path: "/" },
@@ -138,13 +138,17 @@ function Sidebar() {
 									{isAuthenticated ? (session?.serverName || "Jellyfin") : "Connect Server"}
 								</span>
 								<span className="truncate text-[10px] text-zinc-500">
-									{isAuthenticated ? session?.username : "Jellyfin audio"}
+									{isAuthenticated ? (isOffline ? "Offline — cached data" : session?.username) : "Jellyfin audio"}
 								</span>
 							</div>
 						</div>
 
 						<span
-							className={`ml-1.5 h-2 w-2 shrink-0 rounded-full ${isAuthenticated ? "bg-emerald-500 shadow-sm shadow-emerald-500/50" : "bg-zinc-600"
+							className={`ml-1.5 h-2 w-2 shrink-0 rounded-full ${isOffline
+									? "bg-amber-500 shadow-sm shadow-amber-500/50"
+									: isAuthenticated
+										? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
+										: "bg-zinc-600"
 								}`}
 						/>
 					</button>
