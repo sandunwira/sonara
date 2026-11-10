@@ -1,7 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import {
 	authenticateByName,
+	cleanUrl,
+	getAuthHeaders,
 	testServer,
 	fetchUserMusic,
 	fetchRecentlyPlayed,
@@ -41,6 +43,7 @@ export function JellyfinProvider({ children }) {
 	const [genres, setGenres] = useState([]);
 	const [isOffline, setIsOffline] = useState(false);
 	const [servers, setServers] = useState([]);
+	const [connectionStatus, setConnectionStatus] = useState("checking");
 
 	const isAuthenticated = Boolean(session?.accessToken && session?.serverUrl && session?.userId);
 
@@ -115,6 +118,81 @@ export function JellyfinProvider({ children }) {
 			window.removeEventListener("online", handleOnline);
 		};
 	}, []);
+
+	// Periodically probe the real server (bypassing the local cache) to keep
+	// the title bar connection indicator accurate. Distinct from isOffline
+	// (browser network state) — a reachable-but-slow or auth-broken server is
+	// reported as "weak" here, an unreachable one as "offline".
+	const connectionStatusRef = useRef("checking");
+	useEffect(() => {
+		if (!session?.serverUrl) {
+			setConnectionStatus("offline");
+			return undefined;
+		}
+
+		let cancelled = false;
+		let intervalId = null;
+		let timeoutId = null;
+		const base = cleanUrl(session.serverUrl);
+
+		const probe = async () => {
+			if (!navigator.onLine) {
+				setConnectionStatus("offline");
+				return;
+			}
+			const startedAt = performance.now();
+			const controller = new AbortController();
+			timeoutId = setTimeout(() => controller.abort(), 4000);
+			try {
+				const response = await fetch(`${base}/System/Info/Public`, {
+					headers: getAuthHeaders(),
+					cache: "no-store",
+					signal: controller.signal,
+				});
+				if (cancelled) return;
+				const latency = performance.now() - startedAt;
+				setConnectionStatus(
+					response.ok && latency <= 1500 ? "ok" : "weak",
+				);
+			} catch {
+				if (cancelled) return;
+				setConnectionStatus("offline");
+			} finally {
+				clearTimeout(timeoutId);
+			}
+		};
+
+		const onConnectivityChanged = () => probe();
+		probe();
+		intervalId = setInterval(probe, 15000);
+		window.addEventListener("online", onConnectivityChanged);
+		window.addEventListener("offline", onConnectivityChanged);
+
+		return () => {
+			cancelled = true;
+			clearInterval(intervalId);
+			clearTimeout(timeoutId);
+			window.removeEventListener("online", onConnectivityChanged);
+			window.removeEventListener("offline", onConnectivityChanged);
+		};
+	}, [session?.serverUrl]);
+
+	// Record every connection status change in the application logs.
+	useEffect(() => {
+		if (connectionStatus === connectionStatusRef.current) return;
+		connectionStatusRef.current = connectionStatus;
+		const messages = {
+			ok: "Jellyfin server connection is healthy",
+			weak: "Weak connection to the Jellyfin server",
+			offline: "Jellyfin server is unreachable",
+			checking: "Checking Jellyfin server connection",
+		};
+		recordAppLog(
+			connectionStatus === "ok" ? "info" : "warning",
+			"network",
+			messages[connectionStatus] || "Connection status changed",
+		);
+	}, [connectionStatus]);
 
 	// Load user music when authenticated
 	const loadLibrary = useCallback(async (currentSession = session, { forceRefresh = false } = {}) => {
@@ -406,6 +484,7 @@ export function JellyfinProvider({ children }) {
 				servers,
 				switchServer,
 				removeServer,
+				connectionStatus,
 				refreshMostPlayed,
 				refreshRecentlyPlayed,
 				reportTrackPlayed,
