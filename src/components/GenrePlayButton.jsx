@@ -6,20 +6,20 @@ import {
 
 // Circular play/pause overlay button for genre cards (Home grid + Genres
 // page). Visible on card hover; stays visible (and un-faded) while the
-// genre's tracks load, while a track from the genre is the current one, or
-// while any of its tracks sit in the queue. Pause icon only shows while the
-// current track from this genre is actually playing.
+// genre's tracks load or while playback was started from this genre card
+// (isCurrentGenre tracks whether the loaded track belongs to this genre,
+// which decides play vs pause icon).
 function GenrePlayButton({
 	genre,
 	isCurrentGenre = false,
-	isQueuedGenre = false,
+	isActiveGenre = false,
 	isPending = false,
 	isPlaying = false,
 	onPlay,
 	onTogglePlay,
 }) {
 	const genreName = genre?.name || "genre";
-	const showAlways = isPending || isQueuedGenre;
+	const showAlways = isPending || isActiveGenre;
 	const showPauseIcon = isCurrentGenre && isPlaying;
 
 	const handleClick = (event) => {

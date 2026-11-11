@@ -170,12 +170,12 @@ function AlbumCarousel({
 											)}
 											aria-label={`${isCurrentlyPlaying ? "Pause" : "Play"} ${item.title}`}
 											title={isCurrentlyPlaying ? "Pause" : "Play"}
-											className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition hover:scale-110 active:scale-95"
+											className="flex p-1 md:p-2 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition hover:scale-110 active:scale-95"
 										>
 											{isCurrentlyPlaying ? (
-												<IconPlayerPauseFilled size={15} />
+												<IconPlayerPauseFilled size={16} />
 											) : (
-												<IconPlayerPlayFilled size={15} className="ml-0.5" />
+												<IconPlayerPlayFilled size={16} />
 											)}
 										</button>
 										<button
@@ -185,7 +185,7 @@ function AlbumCarousel({
 											title="Play Last"
 											className="flex h-7 w-7 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15 hover:text-white active:scale-95"
 										>
-											<IconPlaylist size={16} stroke={2} />
+											<IconPlaylist size={15} stroke={2} />
 										</button>
 									</div>
 

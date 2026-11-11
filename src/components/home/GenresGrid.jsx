@@ -10,7 +10,7 @@ function GenresGrid({
 	isPlaying = false,
 	pendingGenreIds,
 	currentGenreNames,
-	queueGenreNames,
+	activeGenreId,
 }) {
 	const navigate = useNavigate();
 
@@ -43,8 +43,8 @@ function GenresGrid({
 					const isPending = pendingGenreIds?.has(genre.id) || false;
 					// This genre's track is the one currently playing/paused
 					const isCurrentGenre = currentGenreNames?.has(nameKey) || false;
-					// Any track from this genre sits somewhere in the queue
-					const isQueuedGenre = queueGenreNames?.has(nameKey) || false;
+					// Playback was started from this genre card
+					const isActiveGenre = activeGenreId != null && activeGenreId === genre.id;
 
 					const handleGenreClick = () => onSelectGenre && onSelectGenre(genre);
 
@@ -73,13 +73,14 @@ function GenresGrid({
 								{genre.name}
 							</span>
 
-							{/* Play/pause overlay: play on hover; pause/queue members stay visible */}
+							{/* Play/pause overlay: play on hover; the genre playback was
+							    started from (and in-flight loads) stay visible */}
 							<GenrePlayButton
 								genre={genre}
 								isPlaying={isPlaying}
 								isPending={isPending}
 								isCurrentGenre={isCurrentGenre}
-								isQueuedGenre={isQueuedGenre}
+								isActiveGenre={isActiveGenre}
 								onPlay={onPlayGenre}
 								onTogglePlay={onTogglePlay}
 							/>

@@ -8,7 +8,7 @@ const PlayerContext = createContext();
 
 function restoreSavedQueue(saved, session) {
 	if (!saved || !Array.isArray(saved.queue)) {
-		return { queue: [], queueIndex: -1, currentTrack: null };
+		return { queue: [], queueIndex: -1, currentTrack: null, playbackSource: null };
 	}
 
 	const queue = saved.queue
@@ -29,7 +29,7 @@ function restoreSavedQueue(saved, session) {
 		? queue[queueIndex]
 		: null;
 
-	return { queue, queueIndex, currentTrack };
+	return { queue, queueIndex, currentTrack, playbackSource: saved.playbackSource || null };
 }
 
 export function PlayerProvider({ children }) {
@@ -44,6 +44,9 @@ export function PlayerProvider({ children }) {
 	const [isRepeat, setIsRepeat] = useState(false);
 	const [queue, setQueue] = useState([]);
 	const [queueIndex, setQueueIndex] = useState(-1);
+	// Where the current playback originated (e.g. a genre card). Genre cards
+	// keep their play/pause button visible only while this points at them.
+	const [playbackSource, setPlaybackSource] = useState(null);
 
 	const currentTrackRef = useRef(currentTrack);
 	const queueRestoredRef = useRef(false);
@@ -86,6 +89,7 @@ export function PlayerProvider({ children }) {
 				setQueue(restored.queue);
 				setQueueIndex(restored.queueIndex);
 				setCurrentTrack(restored.currentTrack);
+				setPlaybackSource(restored.playbackSource);
 			})
 			.catch((error) => {
 				console.error("Could not restore saved playback queue from the database:", error);
@@ -112,6 +116,7 @@ export function PlayerProvider({ children }) {
 			}),
 			queueIndex,
 			currentTrackId: currentTrack?.id || null,
+			playbackSource,
 		}).catch((error) => {
 			console.error("Could not save playback queue to the database:", error);
 			toast.error("Could not save playback queue");
@@ -144,6 +149,7 @@ export function PlayerProvider({ children }) {
 		setDuration(0);
 		setCurrentTrack(null);
 		currentTrackRef.current = null;
+		setPlaybackSource(null);
 		updateQueue([], -1);
 		return undefined;
 	}, [isSessionLoaded, session]);
@@ -356,6 +362,10 @@ export function PlayerProvider({ children }) {
 
 	const playTrack = (track, newQueue = null) => {
 		if (!track) return;
+		// Starting playback from an arbitrary list invalidates any previous
+		// "played from genre card" origin. Genre playback re-sets it right
+		// after via setPlaybackSource.
+		setPlaybackSource(null);
 		const nextQueue = Array.isArray(newQueue) && newQueue.length > 0
 			? [...newQueue]
 			: [track];
@@ -370,6 +380,7 @@ export function PlayerProvider({ children }) {
 
 	const playNow = (track) => {
 		if (!track) return;
+		setPlaybackSource(null);
 		const nextQueue = [...queueRef.current];
 		let activeIndex = currentTrackRef.current ? queueIndexRef.current : -1;
 
@@ -450,6 +461,7 @@ export function PlayerProvider({ children }) {
 
 	const clearQueue = () => {
 		const track = currentTrackRef.current;
+		setPlaybackSource(null);
 		updateQueue(track ? [track] : [], track ? 0 : -1);
 	};
 
@@ -579,6 +591,8 @@ export function PlayerProvider({ children }) {
 				isRepeat,
 				queue,
 				queueIndex,
+				playbackSource,
+				setPlaybackSource,
 				playTrack,
 				playNow,
 				playNext,
@@ -617,6 +631,8 @@ export function usePlayer() {
 			isRepeat: false,
 			queue: [],
 			queueIndex: -1,
+			playbackSource: null,
+			setPlaybackSource: () => { },
 			togglePlay: () => { },
 			playTrack: () => { },
 			playNow: () => { },

@@ -25,8 +25,8 @@ function HomePage() {
 	const {
 		playGenre,
 		pendingGenreIds,
+		activeGenreId,
 		currentGenreNames,
-		queueGenreNames,
 		isPlaying,
 		togglePlay,
 	} = useGenrePlayback();
@@ -73,7 +73,7 @@ function HomePage() {
 					isPlaying={isPlaying}
 					pendingGenreIds={pendingGenreIds}
 					currentGenreNames={currentGenreNames}
-					queueGenreNames={queueGenreNames}
+					activeGenreId={activeGenreId}
 				/>
 			)}
 

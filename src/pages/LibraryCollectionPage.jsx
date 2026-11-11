@@ -28,7 +28,7 @@ export default function LibraryCollectionPage({
 	const navigate = useNavigate();
 	const { session, isAuthenticated, openServerModal, libraryVersion } = useJellyfin();
 	const { playTrack } = usePlayer();
-	const { playGenre, pendingGenreIds, currentGenreNames, queueGenreNames, isPlaying, togglePlay } = useGenrePlayback();
+	const { playGenre, pendingGenreIds, activeGenreId, currentGenreNames, isPlaying, togglePlay } = useGenrePlayback();
 	const [items, setItems] = useState([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState("");
@@ -178,7 +178,7 @@ export default function LibraryCollectionPage({
 							const nameKey = String(genre.name || "").toLowerCase();
 							const isPending = pendingGenreIds?.has(genre.id) || false;
 							const isCurrentGenre = currentGenreNames?.has(nameKey) || false;
-							const isQueuedGenre = queueGenreNames?.has(nameKey) || false;
+							const isActiveGenre = activeGenreId != null && activeGenreId === genre.id;
 							const navigateToGenre = () =>
 								navigate(`${detailPath}/${genre.id}`, { state: { title: genre.name } });
 							return (
@@ -208,7 +208,7 @@ export default function LibraryCollectionPage({
 										isPlaying={isPlaying}
 										isPending={isPending}
 										isCurrentGenre={isCurrentGenre}
-										isQueuedGenre={isQueuedGenre}
+										isActiveGenre={isActiveGenre}
 										onPlay={playGenre}
 										onTogglePlay={togglePlay}
 									/>

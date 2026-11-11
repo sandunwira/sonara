@@ -11,7 +11,7 @@ import { recordAppLog } from "../services/jellyfinCache";
 // derives which genres the current track belongs to and which genres have
 // any track in the queue, so cards can keep their play/pause button visible.
 export function useGenrePlayback() {
-	const { currentTrack, isPlaying, playTrack, togglePlay, queue } = usePlayer();
+	const { currentTrack, isPlaying, playTrack, togglePlay, playbackSource, setPlaybackSource } = usePlayer();
 	const { session } = useJellyfin();
 	const [pendingGenreIds, setPendingGenreIds] = useState(() => new Set());
 
@@ -42,7 +42,10 @@ export function useGenrePlayback() {
 				toast.error(`No tracks found for "${genre.name}"`);
 				return;
 			}
+			// playTrack clears any previous playback origin, so stamp this
+			// genre as the source right after starting its queue.
 			playTrack(genreTracks[0], genreTracks);
+			setPlaybackSource({ type: "genre", id: genre.id, name: genre.name });
 		} catch (error) {
 			console.error(`Could not play the "${genre.name}" genre:`, error);
 			recordAppLog("error", "jellyfin-playback", `Could not play genre "${genre.name}"`, {
@@ -64,18 +67,11 @@ export function useGenrePlayback() {
 		return names;
 	}, [currentTrack]);
 
-	// Genre names with any track anywhere in the queue
-	const queueGenreNames = useMemo(() => {
-		const names = new Set(currentGenreNames);
-		queue.forEach((track) => {
-			(track?.raw?.Genres || track?.genreNames || []).forEach((name) => {
-				if (name) names.add(String(name).toLowerCase());
-			});
-		});
-		return names;
-	}, [queue, currentGenreNames]);
+	// The genre card playback was started from (if any). Only this card keeps
+	// its play/pause button visible without hover.
+	const activeGenreId = playbackSource?.type === "genre" ? playbackSource.id : null;
 
-	return { playGenre, pendingGenreIds, currentGenreNames, queueGenreNames, isPlaying, togglePlay };
+	return { playGenre, pendingGenreIds, activeGenreId, currentGenreNames, isPlaying, togglePlay };
 }
 
 export default useGenrePlayback;
