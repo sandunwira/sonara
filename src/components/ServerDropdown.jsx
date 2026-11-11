@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
 	IconAntennaBars5,
-	IconCheck,
 	IconChevronDown,
 	IconPlus,
 	IconServer,
@@ -17,8 +16,8 @@ const CONNECTION_STATUS_META = {
 	checking: { label: "Checking connection", className: "text-zinc-500" },
 };
 
-// Small signal indicator left of the selected server name, always visible.
-// Colors track the connection state: green healthy, amber weak, gray offline.
+// Small signal indicator, shown on the active server row. Colors track the
+// connection state: green healthy, amber weak, gray offline.
 function ConnectionStatusIcon() {
 	const { connectionStatus } = useJellyfin();
 
@@ -26,7 +25,7 @@ function ConnectionStatusIcon() {
 
 	return (
 		<IconAntennaBars5
-			size={15}
+			size={14}
 			stroke={1.8}
 			aria-label={meta.label}
 			title={meta.label}
@@ -35,6 +34,8 @@ function ConnectionStatusIcon() {
 	);
 }
 
+// A collapsible header row and nav-style entries (active = blue/semibold,
+// hover = #1a1a22). The active server row shows the connection status icon.
 function ServerDropdown() {
 	const { isAuthenticated, session, servers, switchServer, removeServer, openServerModal } = useJellyfin();
 	const [isOpen, setIsOpen] = useState(false);
@@ -55,7 +56,6 @@ function ServerDropdown() {
 	const activeServer = servers.find(
 		(server) => normalizeServerUrl(server.serverUrl) === activeServerUrl,
 	);
-	const currentServerName = activeServer?.serverName || session?.serverName || "Jellyfin";
 
 	const handleSelect = (server) => {
 		setIsOpen(false);
@@ -63,94 +63,109 @@ function ServerDropdown() {
 		switchServer(server.serverUrl);
 	};
 
-	const handleRemove = (server) => {
+	const handleRemove = (server, event) => {
+		event.stopPropagation();
 		removeServer(server.serverUrl);
 	};
 
+	const handleAddServer = () => {
+		setIsOpen(false);
+		openServerModal();
+	};
+
 	return (
-		<div ref={containerRef} className="relative">
-			{/* Collapsed: the currently selected server */}
+		<div ref={containerRef}>
+			{/* Group header */}
 			<button
 				type="button"
-				onClick={() => setIsOpen((open) => !open)}
-				aria-label="Switch Jellyfin server"
-				title="Switch Jellyfin server"
+				onClick={() => setIsOpen(!isOpen)}
+				aria-label="Toggle saved servers"
 				className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
 			>
-				<span className="flex min-w-0 flex-1 items-center gap-1.5">
-					<ConnectionStatusIcon />
-					<span>
-						{isAuthenticated ? currentServerName : "No Server"}
-					</span>
-				</span>
+				<span>Servers</span>
 				<IconChevronDown
 					size={13}
-					stroke={2}
-					className={`transition-transform duration-200 ${isOpen ? "-rotate-180" : "rotate-0"}`}
+					className={`shrink-0 transition-transform duration-200 ${isOpen ? "-rotate-180" : "rotate-0"
+						}`}
 				/>
 			</button>
 
-			{/* Expanded: all saved servers */}
-			{isOpen && (
-				<div className="absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-xs border border-[#2b2b35] bg-[#141419] p-1 shadow-xl shadow-black/60">
-					<span className="block px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-						Saved Servers
-					</span>
+			{/* The list is always rendered: collapsed it shows just the selected
+			    server; expanded it shows every saved server. */}
+			<nav className="mt-1 flex flex-col space-y-0.5">
+				{(() => {
+					const visibleServers = isOpen
+						? servers
+						: servers.filter(
+							(server) => normalizeServerUrl(server.serverUrl) === activeServerUrl,
+						);
 
-					{servers.length === 0 && (
-						<p className="px-2 py-1.5 text-[10px] leading-4 text-zinc-500">
-							No servers saved yet. Connect one to add it here.
-						</p>
-					)}
+					if (visibleServers.length === 0) {
+						return isOpen ? (
+							<p className="px-2 py-1.5 text-xs text-zinc-500">
+								No servers saved yet
+							</p>
+						) : (
+							<p className="px-2 py-1.5 text-xs text-zinc-600">
+								No server
+							</p>
+						);
+					}
 
-					<div className="max-h-56 overflow-y-auto">
-						{servers.map((server) => {
-							const isActive = normalizeServerUrl(server.serverUrl) === activeServerUrl;
-							return (
-								<div
-									key={server.serverUrl}
-									className={`group flex items-center rounded-xs ${isActive ? "bg-blue-500/10" : ""}`}
+					return visibleServers.map((server) => {
+						const isActive = normalizeServerUrl(server.serverUrl) === activeServerUrl;
+						return (
+							<div key={server.serverUrl} className="group relative flex w-full items-center">
+								<button
+									type="button"
+									onClick={() => handleSelect(server)}
+									disabled={isActive}
+									className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
+											? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
+											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
+										}`}
 								>
-									<button
-										type="button"
-										onClick={() => handleSelect(server)}
-										disabled={isActive}
-										className="flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1.5 text-left transition hover:bg-[#1a1a22] disabled:cursor-default disabled:hover:bg-transparent"
-									>
-										<span className="truncate text-xs font-medium text-zinc-200">
-											{server.serverName || server.serverUrl}
-										</span>
-										{isActive && <IconCheck size={13} stroke={2.5} className="ml-auto shrink-0 text-blue-500" />}
-									</button>
-									<button
-										type="button"
-										aria-label={`Remove ${server.serverName || server.serverUrl}`}
-										title="Remove server from Sonara"
-										onClick={() => handleRemove(server)}
-										className="mr-1 shrink-0 rounded-xs p-1 text-zinc-500 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"
-									>
-										<IconTrash size={12} />
-									</button>
-								</div>
-							);
-						})}
-					</div>
+									{isActive ? (
+										<ConnectionStatusIcon />
+									) : (
+										<IconServer
+											size={14}
+											stroke={1.8}
+											className="shrink-0 text-zinc-400 group-hover:text-zinc-200"
+										/>
+									)}
+									<span className="truncate">{server.serverName || server.serverUrl}</span>
+								</button>
+								<button
+									type="button"
+									aria-label={`Remove ${server.serverName || server.serverUrl}`}
+									title="Remove server from Sonara"
+									onClick={(event) => handleRemove(server, event)}
+									className="absolute right-1 rounded-xs p-1 text-zinc-500 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"
+								>
+									<IconTrash size={12} />
+								</button>
+							</div>
+						);
+					});
+				})()}
 
-					<div className="mt-1 border-t border-[#22222b] pt-1">
-						<button
-							type="button"
-							onClick={() => {
-								setIsOpen(false);
-								openServerModal();
-							}}
-							className="flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-zinc-300 transition hover:bg-[#1a1a22] hover:text-white"
-						>
-							<IconPlus size={14} className="shrink-0" />
-							<span className="text-xs font-medium">Add Server</span>
-						</button>
-					</div>
-				</div>
-			)}
+				{/* Add Server entry (only while expanded) */}
+				{isOpen && (
+					<button
+						type="button"
+						onClick={handleAddServer}
+						className="group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium text-zinc-300 transition cursor-pointer hover:bg-[#1a1a22] hover:text-white"
+					>
+						<IconPlus
+							size={14}
+							stroke={1.8}
+							className="shrink-0 text-zinc-400 group-hover:text-zinc-200"
+						/>
+						<span>Add Server</span>
+					</button>
+				)}
+			</nav>
 		</div>
 	);
 }

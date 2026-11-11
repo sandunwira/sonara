@@ -42,7 +42,7 @@ function Sidebar() {
 	return (
 		<aside className="flex h-full w-55 shrink-0 flex-col justify-between border-r border-[#1b1b22] bg-[#0d0d10] text-zinc-300">
 			{/* Top nav scrollable section */}
-			<div className="flex flex-1 flex-col overflow-y-auto p-3 space-y-3">
+			<div className="flex flex-1 flex-col overflow-y-auto px-2 py-1.5 space-y-3">
 				{/* Active Jellyfin server switcher */}
 				<ServerDropdown />
 
