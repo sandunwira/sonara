@@ -75,18 +75,18 @@ function ServerDropdown() {
 				onClick={() => setIsOpen((open) => !open)}
 				aria-label="Switch Jellyfin server"
 				title="Switch Jellyfin server"
-				className="flex w-full items-center px-2 py-1.5 gap-2 rounded-xs text-left"
+				className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
 			>
 				<span className="flex min-w-0 flex-1 items-center gap-1.5">
 					<ConnectionStatusIcon />
-					<span className="truncate text-xs font-medium text-zinc-100">
+					<span>
 						{isAuthenticated ? currentServerName : "No Server"}
 					</span>
 				</span>
 				<IconChevronDown
 					size={13}
 					stroke={2}
-					className={`shrink-0 text-zinc-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+					className={`transition-transform duration-200 ${isOpen ? "-rotate-180" : "rotate-0"}`}
 				/>
 			</button>
 
