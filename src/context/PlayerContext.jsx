@@ -563,7 +563,7 @@ export function PlayerProvider({ children }) {
 
 	// Format: [<playing or paused>] Track Title — Artist — Sonara
 	const title = currentTrack?.title
-		? `[${isPlaying ? "Playing" : "Paused"}] ${currentTrack.title} — ${currentTrack.artist} — Sonara`
+		? `[${isPlaying ? "PLAYING" : "PAUSED"}] ${currentTrack.title} — ${currentTrack.artist} — Sonara`
 		: "Sonara";
 
 	return (
