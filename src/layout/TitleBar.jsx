@@ -47,7 +47,7 @@ function TitleBar({ title }) {
 						className="h-3.5 w-3.5 object-center object-contain"
 						alt="Sonara logo"
 					/>
-					<span className="text-xs font-semibold text-zinc-300 truncate max-w-[calc(100vw-200px)]">
+					<span className="text-[10px] font-semibold text-zinc-300 truncate max-w-[calc(100vw-200px)]">
 						{displayTitle}
 					</span>
 				</div>
