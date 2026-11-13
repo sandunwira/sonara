@@ -570,6 +570,115 @@ export function PlayerProvider({ children }) {
 		startTrack(currentQueue[prevIdx]);
 	};
 
+	// ---- OS media controls (MediaSession API) ----
+	const mediaActionsRef = useRef({ togglePlay, nextTrack, prevTrack, seek });
+	mediaActionsRef.current = { togglePlay, nextTrack, prevTrack, seek };
+	const mediaPositionRef = useRef(-1);
+
+	useEffect(() => {
+		if (!("mediaSession" in navigator)) return undefined;
+		const { mediaSession } = navigator;
+		const audio = audioRef.current;
+
+		const resumePlayback = () => {
+			if (!audio) return;
+			if (!audio.src && currentTrackRef.current?.streamUrl) {
+				audio.src = currentTrackRef.current.streamUrl;
+			}
+			if (audio.src) audio.play().catch(() => { });
+		};
+		const pausePlayback = () => audio?.pause();
+		const stopPlayback = () => {
+			if (!audio) return;
+			audio.pause();
+			if (audio.src) audio.currentTime = 0;
+		};
+
+		const actionHandlers = {
+			play: resumePlayback,
+			pause: pausePlayback,
+			stop: stopPlayback,
+			previoustrack: () => mediaActionsRef.current.prevTrack?.(),
+			nexttrack: () => mediaActionsRef.current.nextTrack?.(),
+			seekbackward: (details) => {
+				if (!audio?.src) return;
+				mediaActionsRef.current.seek?.(Math.max(0, audio.currentTime - (details.seekOffset || 10)));
+			},
+			seekforward: (details) => {
+				if (!audio?.src) return;
+				mediaActionsRef.current.seek?.(audio.currentTime + (details.seekOffset || 10));
+			},
+			seekto: (details) => {
+				if (details.seekTime == null || !audio?.src) return;
+				mediaActionsRef.current.seek?.(details.seekTime);
+			},
+		};
+
+		for (const [action, handler] of Object.entries(actionHandlers)) {
+			try {
+				mediaSession.setActionHandler(action, handler);
+			} catch {
+				// Action unsupported on this platform - skip it.
+			}
+		}
+
+		return () => {
+			for (const action of Object.keys(actionHandlers)) {
+				try {
+					mediaSession.setActionHandler(action, null);
+				} catch {
+					// Ignore cleanup failures.
+				}
+			}
+		};
+	}, []);
+
+	// Show the current track in the system media overlay (title, artist, album, artwork).
+	useEffect(() => {
+		if (!("mediaSession" in navigator)) return;
+		if (!currentTrack) {
+			navigator.mediaSession.metadata = null;
+			return;
+		}
+		try {
+			navigator.mediaSession.metadata = new MediaMetadata({
+				title: currentTrack.title || "Unknown track",
+				artist: currentTrack.artist || "",
+				album: currentTrack.album || "",
+				artwork: currentTrack.cover
+					? [{ src: currentTrack.cover, sizes: "256x256 512x512", type: "image/jpeg" }]
+					: [],
+			});
+		} catch {
+			// MediaMetadata unavailable in this webview.
+		}
+	}, [currentTrack]);
+
+	// Keep the overlay's play/pause glyph in sync with actual playback.
+	useEffect(() => {
+		if (!("mediaSession" in navigator)) return;
+		navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+	}, [isPlaying]);
+
+	// Keep the overlay's scrubber roughly in sync (once per second).
+	useEffect(() => {
+		if (!("mediaSession" in navigator) || !navigator.mediaSession.setPositionState) return;
+		if (!duration || !isFinite(duration) || duration <= 0) return;
+		if (!isFinite(currentTime) || currentTime < 0) return;
+		const position = Math.min(Math.floor(currentTime), duration);
+		if (position === mediaPositionRef.current) return;
+		mediaPositionRef.current = position;
+		try {
+			navigator.mediaSession.setPositionState({
+				duration,
+				playbackRate: 1,
+				position,
+			});
+		} catch {
+			// Invalid position state on this platform - ignore.
+		}
+	}, [currentTime, duration]);
+
 	const toggleShuffle = () => setIsShuffle((prev) => !prev);
 	const toggleRepeat = () => setIsRepeat((prev) => !prev);
 
