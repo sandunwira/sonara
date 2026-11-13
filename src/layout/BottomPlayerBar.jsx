@@ -78,7 +78,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 
 						<div className="flex min-w-0 flex-1 flex-col justify-center">
 							<div className="flex items-center gap-1.5">
-								<span className="truncate text-xs font-semibold text-zinc-100 hover:text-white cursor-pointer">
+								<span className="w-fit truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
 									{currentTrack.title}
 								</span>
 								{/* {onTrackOptions && (
@@ -92,14 +92,9 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 									</button>
 								)} */}
 							</div>
-							<span className="truncate text-[11px] text-zinc-400 hover:text-zinc-300 cursor-pointer">
+							<span className="w-fit truncate text-[11px] font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
 								{currentTrack.artist}
 							</span>
-							{currentTrack.album && (
-								<span className="truncate text-[10px] text-zinc-500">
-									{currentTrack.album}
-								</span>
-							)}
 						</div>
 					</>
 				) : (

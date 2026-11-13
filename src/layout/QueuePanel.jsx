@@ -16,7 +16,6 @@ import Artwork from "../components/Artwork";
 function QueuePanel({ isOpen, onClose }) {
 	const {
 		currentTrack,
-		isPlaying,
 		queue,
 		queueIndex,
 		removeQueuedTrack,
@@ -94,28 +93,14 @@ function QueuePanel({ isOpen, onClose }) {
 										alt={currentTrack.title}
 										className="aspect-square w-full object-cover"
 									/>
-									<span
-										className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-											isPlaying
-												? "bg-blue-500 text-white shadow-sm shadow-blue-500/40"
-												: "bg-black/70 text-blue-400"
-										}`}
-									>
-										{isPlaying ? "Playing" : "Paused"}
-									</span>
 								</div>
 								<div className="p-3">
-									<p className="truncate text-sm font-semibold text-white">
+									<p className="w-fit truncate text-sm font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
 										{currentTrack.title}
 									</p>
-									<p className="truncate text-xs text-zinc-400">
+									<p className="w-fit truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
 										{currentTrack.artist}
 									</p>
-									{currentTrack.album && (
-										<p className="mt-0.5 truncate text-[11px] text-zinc-500">
-											{currentTrack.album}
-										</p>
-									)}
 								</div>
 							</div>
 						) : (
