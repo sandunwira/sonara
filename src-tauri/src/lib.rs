@@ -2,8 +2,8 @@ mod functions;
 
 use functions::*;
 
-use tauri_plugin_sql::{Migration, MigrationKind};
 use tauri::Manager;
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -55,6 +55,16 @@ pub fn run() {
             sql: "CREATE TABLE IF NOT EXISTS jellyfin_servers (
                 server_url TEXT PRIMARY KEY NOT NULL,
                 data TEXT NOT NULL
+            );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 6,
+            description: "create_lyrics_cache_storage",
+            sql: "CREATE TABLE IF NOT EXISTS lyrics_cache (
+                cache_key TEXT PRIMARY KEY NOT NULL,
+                data TEXT NOT NULL,
+                fetched_at TEXT NOT NULL
             );",
             kind: MigrationKind::Up,
         },

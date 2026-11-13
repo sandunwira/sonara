@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	IconChevronDown,
 	IconChevronUp,
@@ -8,14 +8,18 @@ import {
 } from "@tabler/icons-react";
 import { usePlayer } from "../context/PlayerContext";
 import Artwork from "../components/Artwork";
+import { fetchLyrics } from "../services/lyrics";
 
-// Collapsible right-side panel with a now-playing preview and the queue.
-// The wrapper animates its width so the panel slides open/closed without
-// shifting the window controls, and it is fully closable from its own X and
-// Escape, or via the queue toggle in the bottom player bar.
+// Collapsible right-side panel with a now-playing preview, lyrics for the
+// current track (when LRCLIB has any) and the queue. The wrapper animates its
+// width so the panel slides open/closed without shifting the window controls,
+// and it is fully closable from its own X and Escape, or via the queue toggle
+// in the bottom player bar.
 function QueuePanel({ isOpen, onClose }) {
 	const {
 		currentTrack,
+		currentTime,
+		seek,
 		queue,
 		queueIndex,
 		removeQueuedTrack,
@@ -26,6 +30,59 @@ function QueuePanel({ isOpen, onClose }) {
 
 	const upcomingStartIndex = Math.max(queueIndex + 1, 0);
 	const upcomingTracks = queue.slice(upcomingStartIndex);
+
+	// ---- Lyrics (LRCLIB) ----
+	// null = no lyrics for this track: the whole section stays hidden.
+	const [lyrics, setLyrics] = useState(null);
+	const lyricsScrollRef = useRef(null);
+	const lyricLineRefs = useRef([]);
+	// Manual scrolling pauses the follow-the-line auto scroll briefly.
+	const userScrollUntilRef = useRef(0);
+
+	useEffect(() => {
+		if (!currentTrack?.title || !currentTrack?.artist) {
+			setLyrics(null);
+			return undefined;
+		}
+		let cancelled = false;
+		setLyrics(null);
+		lyricLineRefs.current = [];
+		userScrollUntilRef.current = 0;
+		fetchLyrics(currentTrack.artist, currentTrack.title).then((result) => {
+			if (!cancelled) setLyrics(result);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [currentTrack?.id, currentTrack?.title, currentTrack?.artist]);
+
+	// Line currently being sung (a small offset compensates for latency).
+	const activeLyricIndex = useMemo(() => {
+		if (!lyrics?.synced) return -1;
+		let index = -1;
+		for (let i = 0; i < lyrics.synced.length; i += 1) {
+			if (lyrics.synced[i].time <= currentTime + 0.3) index = i;
+			else break;
+		}
+		return index;
+	}, [lyrics, currentTime]);
+
+	// Keep the active line centred in the lyrics box.
+	useEffect(() => {
+		if (activeLyricIndex < 0) return;
+		if (Date.now() < userScrollUntilRef.current) return;
+		const container = lyricsScrollRef.current;
+		const line = lyricLineRefs.current[activeLyricIndex];
+		if (!container || !line) return;
+		const target = line.offsetTop - container.clientHeight / 2 + line.clientHeight / 2;
+		container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+	}, [activeLyricIndex]);
+
+	const lyricLineClass = (index) => {
+		if (index === activeLyricIndex) return "text-sm font-semibold text-white";
+		if (index < activeLyricIndex) return "text-xs text-zinc-600 hover:text-zinc-400";
+		return "text-xs text-zinc-500 hover:text-zinc-300";
+	};
 
 	useEffect(() => {
 		if (!isOpen) return undefined;
@@ -40,11 +97,10 @@ function QueuePanel({ isOpen, onClose }) {
 		<section
 			aria-label="Playback queue"
 			aria-hidden={!isOpen}
-			className={`h-full shrink-0 overflow-hidden border-l transition-all duration-300 ease-out ${
-				isOpen
-					? "w-72 border-[#1b1b22] opacity-100"
-					: "w-0 border-transparent opacity-0"
-			} ${isOpen ? "" : "pointer-events-none"}`}
+			className={`h-full shrink-0 overflow-hidden border-l transition-all duration-300 ease-out ${isOpen
+				? "w-72 border-[#1b1b22] opacity-100"
+				: "w-0 border-transparent opacity-0"
+				} ${isOpen ? "" : "pointer-events-none"}`}
 		>
 			<div className="flex h-full w-72 flex-col bg-[#0d0d10] text-zinc-200">
 				{/* Panel header */}
@@ -79,26 +135,26 @@ function QueuePanel({ isOpen, onClose }) {
 					</div>
 				</header>
 
-				<div className="flex-1 overflow-y-auto">
+				<div className="flex-1 overflow-y-auto space-y-8 px-4 py-4">
 					{/* Now playing preview */}
-					<div className="px-4 py-4">
-						<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+					<div className="space-y-2">
+						<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
 							Now Playing
 						</p>
 						{currentTrack ? (
-							<div className="rounded-xs border border-[#22222a] bg-[#141419]">
-								<div className="relative overflow-hidden rounded-t-xs bg-[#101014]">
+							<div className="rounded-xs space-y-2">
+								<div className="relative overflow-hidden rounded-xs bg-[#101014] border border-zinc-900">
 									<Artwork
 										src={currentTrack.cover}
 										alt={currentTrack.title}
 										className="aspect-square w-full object-cover"
 									/>
 								</div>
-								<div className="p-3">
-									<p className="w-fit truncate text-sm font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+								<div>
+									<p className="truncate text-sm font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
 										{currentTrack.title}
 									</p>
-									<p className="w-fit truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+									<p className="truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
 										{currentTrack.artist}
 									</p>
 								</div>
@@ -116,9 +172,59 @@ function QueuePanel({ isOpen, onClose }) {
 						)}
 					</div>
 
+					{/* Lyrics (hidden entirely when none are available) */}
+					{lyrics?.synced && (
+						<div className="space-y-2">
+							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+								Lyrics
+							</p>
+							<div
+								ref={lyricsScrollRef}
+								onWheel={() => {
+									userScrollUntilRef.current = Date.now() + 4000;
+								}}
+								className="relative max-h-36 overflow-y-auto pr-1 p-3 leading-loose rounded-xs bg-[#101014] border border-zinc-900"
+							>
+								{lyrics.synced.map((line, index) => (
+									line.text ? (
+										<button
+											key={index}
+											type="button"
+											ref={(el) => {
+												lyricLineRefs.current[index] = el;
+											}}
+											onClick={() => seek(line.time)}
+											className={`block w-full text-left leading-loose transition-colors duration-200 ${lyricLineClass(index)}`}
+										>
+											{line.text}
+										</button>
+									) : (
+										<div
+											key={index}
+											ref={(el) => {
+												lyricLineRefs.current[index] = el;
+											}}
+											className="h-3"
+										/>
+									)
+								))}
+							</div>
+						</div>
+					)}
+					{lyrics?.plain && (
+						<div className="space-y-2">
+							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+								Lyrics
+							</p>
+							<p className="rounded-xs border border-[#22222a] bg-[#141419] px-3 py-2 whitespace-pre-line text-xs leading-relaxed text-zinc-400">
+								{lyrics.plain}
+							</p>
+						</div>
+					)}
+
 					{/* Upcoming tracks */}
-					<div className="px-2 pb-2">
-						<p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+					<div className="space-y-2">
+						<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
 							Up Next
 						</p>
 						{upcomingTracks.length === 0 ? (

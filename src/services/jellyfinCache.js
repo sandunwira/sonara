@@ -341,6 +341,51 @@ export function normalizeServerUrl(serverUrl) {
 	return String(serverUrl || "").replace(/\/+$/, "").toLowerCase();
 }
 
+// ---- Lyrics cache (LRCLIB lookups, persisted for offline use) ----
+
+function lyricsCacheKey(artist, title) {
+	const artistName = String(artist || "").trim().toLowerCase();
+	const trackName = String(title || "").trim().toLowerCase();
+	if (!artistName || !trackName) return null;
+	return `${artistName}::${trackName}`;
+}
+
+// Returns the stored lyrics object, null when the track is known to have no
+// lyrics, or undefined when nothing is stored for it yet.
+export async function getStoredLyrics(artist, title) {
+	const key = lyricsCacheKey(artist, title);
+	if (!key) return undefined;
+	const database = await getDatabase();
+	if (!database) return undefined;
+
+	const rows = await database.select(
+		"SELECT data FROM lyrics_cache WHERE cache_key = $1",
+		[key],
+	);
+	if (rows.length === 0) return undefined;
+	try {
+		return JSON.parse(rows[0].data);
+	} catch {
+		return undefined;
+	}
+}
+
+export async function saveStoredLyrics(artist, title, lyrics) {
+	const key = lyricsCacheKey(artist, title);
+	if (!key) return;
+	const database = await getDatabase();
+	if (!database) {
+		throw new Error("Lyrics storage requires the Sonara desktop app");
+	}
+
+	await database.execute(
+		`INSERT INTO lyrics_cache (cache_key, data, fetched_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
+		[key, JSON.stringify(lyrics), new Date().toISOString()],
+	);
+}
+
 export async function getStoredJellyfinSession() {
 	const database = await getDatabase();
 	if (!database) return null;
