@@ -63,8 +63,10 @@ export async function readJellyfinCacheEntry(key) {
 	return readEntry(key);
 }
 
+const SYNC_MARKER_PREFIX = "jellyfin_sync:";
+
 function syncMarkerKey(serverUrl, userId) {
-	return `jellyfin_sync:${serverUrl.replace(/\/+$/, "").toLowerCase()}:${userId}`;
+	return `${SYNC_MARKER_PREFIX}${serverUrl.replace(/\/+$/, "").toLowerCase()}:${userId}`;
 }
 
 export async function isJellyfinLibrarySynced(serverUrl, userId) {
@@ -233,6 +235,106 @@ export async function removeStoredJellyfinServer(serverUrl) {
 	await database.execute("DELETE FROM jellyfin_servers WHERE server_url = $1", [
 		normalizeServerUrl(serverUrl),
 	]);
+}
+
+// Cache keys and sync markers are namespaced by the server's base URL, so a
+// saved server can be updated in place (rename) or re-keyed to a new address
+// while carrying its cached content over. Returns how many cache entries
+// were migrated when the address changed.
+export async function updateStoredJellyfinServer(oldServerUrl, updatedServer) {
+	const database = await getDatabase();
+	if (!database) {
+		throw new Error("Jellyfin server storage requires the Sonara desktop app");
+	}
+
+	const oldKey = normalizeServerUrl(oldServerUrl);
+	const newKey = normalizeServerUrl(updatedServer.serverUrl);
+	if (!oldKey || !newKey) {
+		throw new Error("A server address is required to update a saved server");
+	}
+
+	if (oldKey === newKey) {
+		// Name-only edit (or identical address): refresh the stored record.
+		// Cached content keys stay valid, so nothing else needs to move.
+		await database.execute(
+			"UPDATE jellyfin_servers SET data = $1 WHERE server_url = $2",
+			[JSON.stringify(updatedServer), oldKey],
+		);
+		return { addressChanged: false, migratedCacheEntries: 0 };
+	}
+
+	// Re-key the saved server row to the new address.
+	await database.execute(
+		"UPDATE jellyfin_servers SET server_url = $1, data = $2 WHERE server_url = $3",
+		[newKey, JSON.stringify(updatedServer), oldKey],
+	);
+
+	// Same server content under a new address (e.g. the server moved hosts or
+	// ports): rewrite every cached response key and sync marker so the
+	// existing cache keeps serving instead of being refetched or duplicated.
+	let migratedCacheEntries = 0;
+	const cacheRows = await database.select("SELECT cache_key FROM jellyfin_responses");
+	for (const row of cacheRows) {
+		const key = String(row.cache_key);
+		if (!key.toLowerCase().startsWith(oldKey)) continue;
+		await database.execute(
+			"UPDATE jellyfin_responses SET cache_key = $1 WHERE cache_key = $2",
+			[newKey + key.slice(oldKey.length), key],
+		);
+		migratedCacheEntries += 1;
+	}
+
+	const markerRows = await database.select(
+		"SELECT state_key FROM app_state WHERE state_key LIKE $1",
+		[`${SYNC_MARKER_PREFIX}${oldKey}%`],
+	);
+	for (const row of markerRows) {
+		await database.execute(
+			"UPDATE app_state SET state_key = $1 WHERE state_key = $2",
+			[
+				`${SYNC_MARKER_PREFIX}${newKey}${row.state_key.slice(SYNC_MARKER_PREFIX.length + oldKey.length)}`,
+				row.state_key,
+			],
+		);
+	}
+
+	return { addressChanged: true, migratedCacheEntries };
+}
+
+// Drop every cached response and sync marker that belongs to a server
+// address. Used when an edited address now hosts different content, so no
+// stale entries linger under either the old or the new key.
+export async function purgeJellyfinServerCache(serverUrl) {
+	const database = await getDatabase();
+	if (!database) return { removedCacheEntries: 0 };
+
+	const key = normalizeServerUrl(serverUrl);
+	if (!key) return { removedCacheEntries: 0 };
+
+	const cacheRows = await database.select("SELECT cache_key FROM jellyfin_responses");
+	const doomedKeys = cacheRows
+		.map((row) => String(row.cache_key))
+		.filter((cacheKey) => cacheKey.toLowerCase().startsWith(key));
+
+	const chunkSize = 40;
+	for (let index = 0; index < doomedKeys.length; index += chunkSize) {
+		const chunk = doomedKeys.slice(index, index + chunkSize);
+		const placeholders = chunk.map((_, offset) => `$${offset + 1}`).join(", ");
+		await database.execute(
+			`DELETE FROM jellyfin_responses WHERE cache_key IN (${placeholders})`,
+			chunk,
+		);
+	}
+
+	const markerRows = await database.select(
+		"SELECT state_key FROM app_state WHERE state_key LIKE $1",
+		[`${SYNC_MARKER_PREFIX}${key}%`],
+	);
+	for (const row of markerRows) {
+		await database.execute("DELETE FROM app_state WHERE state_key = $1", [row.state_key]);
+	}
+
+	return { removedCacheEntries: doomedKeys.length };
 }
 
 export function normalizeServerUrl(serverUrl) {

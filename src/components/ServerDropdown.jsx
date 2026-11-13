@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
 	IconAntennaBars5,
 	IconChevronDown,
+	IconPencil,
 	IconPlus,
 	IconServer,
 	IconTrash,
@@ -37,7 +38,7 @@ function ConnectionStatusIcon() {
 // A collapsible header row and nav-style entries (active = blue/semibold,
 // hover = #1a1a22). The active server row shows the connection status icon.
 function ServerDropdown() {
-	const { isAuthenticated, session, servers, switchServer, removeServer, openServerModal } = useJellyfin();
+	const { isAuthenticated, session, servers, switchServer, removeServer, openServerModal, openEditServerModal } = useJellyfin();
 	const [isOpen, setIsOpen] = useState(false);
 	const containerRef = useRef(null);
 
@@ -135,6 +136,18 @@ function ServerDropdown() {
 										/>
 									)}
 									<span className="truncate">{server.serverName || server.serverUrl}</span>
+								</button>
+								<button
+									type="button"
+									aria-label={`Edit ${server.serverName || server.serverUrl}`}
+									title="Edit server name and address"
+									onClick={(event) => {
+										event.stopPropagation();
+										openEditServerModal(server);
+									}}
+									className="absolute right-7 rounded-xs p-1 text-zinc-500 opacity-0 transition hover:bg-white/5 hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
+								>
+									<IconPencil size={12} />
 								</button>
 								<button
 									type="button"

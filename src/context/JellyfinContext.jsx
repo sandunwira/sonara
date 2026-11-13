@@ -18,6 +18,8 @@ import {
 	normalizeServerUrl,
 	removeStoredJellyfinSession,
 	removeStoredJellyfinServer,
+	purgeJellyfinServerCache,
+	updateStoredJellyfinServer,
 	upsertStoredJellyfinServer,
 	recordAppLog,
 	saveStoredJellyfinSession,
@@ -33,6 +35,8 @@ export function JellyfinProvider({ children }) {
 	const [session, setSession] = useState(null);
 	const [isSessionLoaded, setIsSessionLoaded] = useState(false);
 	const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+	// Server currently being edited in the edit-server modal (null = closed).
+	const [editingServer, setEditingServer] = useState(null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSyncingLibrary, setIsSyncingLibrary] = useState(false);
 	const [libraryVersion, setLibraryVersion] = useState(0);
@@ -372,6 +376,166 @@ export function JellyfinProvider({ children }) {
 		}
 	}, [session]);
 
+	const openEditServerModal = (server) => setEditingServer(server || null);
+	const closeEditServerModal = () => setEditingServer(null);
+
+	const updateServer = useCallback(async (oldServerUrl, changes = {}) => {
+		const record = servers.find(
+			(server) => normalizeServerUrl(server.serverUrl) === normalizeServerUrl(oldServerUrl),
+		);
+		if (!record) {
+			toast.error("That server is not saved in Sonara");
+			return { success: false };
+		}
+
+		const nextServerUrl = cleanUrl(changes.serverUrl ?? record.serverUrl);
+		const nextServerName = String(changes.serverName ?? record.serverName ?? "").trim();
+		const nextUsername = String(changes.username ?? record.username ?? "").trim();
+		const password = String(changes.password ?? "");
+
+		if (!nextServerUrl) {
+			toast.error("A server address is required");
+			return { success: false, error: "A server address is required" };
+		}
+
+		const addressChanged = normalizeServerUrl(nextServerUrl) !== normalizeServerUrl(record.serverUrl);
+		const isActive = Boolean(
+			session && normalizeServerUrl(session.serverUrl) === normalizeServerUrl(record.serverUrl),
+		);
+		// Re-sign in when the account changes, or when a password is supplied
+		// to refresh the token against this server.
+		const credentialsChanged = Boolean(nextUsername)
+			&& (nextUsername !== record.username || password !== "");
+
+		// Before saving a moved address or a new sign-in, verify the server
+		// actually answers and learn its identity.
+		let serverInfo = null;
+		if (addressChanged || credentialsChanged) {
+			try {
+				serverInfo = await testServer(nextServerUrl);
+			} catch (error) {
+				const message = `Could not reach a Jellyfin server at ${nextServerUrl}`;
+				await recordAppLog("error", "jellyfin", "Edited server address is unreachable", {
+					message: error.message,
+					serverUrl: nextServerUrl,
+				});
+				toast.error(message);
+				return { success: false, error: message };
+			}
+		}
+
+		// Re-authenticate so the stored token and user match the account.
+		let authData = null;
+		if (credentialsChanged) {
+			try {
+				authData = await authenticateByName(nextServerUrl, nextUsername, password);
+			} catch (error) {
+				const message = error.message || "Could not sign in to the Jellyfin server";
+				await recordAppLog("error", "jellyfin", "Edited server sign-in failed", {
+					message,
+					serverUrl: nextServerUrl,
+				});
+				toast.error(message);
+				return { success: false, error: message };
+			}
+		}
+
+		// The server Id ties content to a physical install: matching Ids mean
+		// the same library, so the cache can safely move to the new address.
+		const resolvedServerId = authData?.serverId || serverInfo?.Id;
+		const isSameServer = Boolean(
+			resolvedServerId && record.serverId && String(resolvedServerId) === String(record.serverId),
+		);
+		// A different account on the same install gets fresh content too
+		// (play history, favourites), so its cache cannot be reused.
+		const userIdChanged = Boolean(authData && record.userId && authData.userId !== record.userId);
+
+		// Another saved server already occupies the new address.
+		const duplicate = servers.find(
+			(server) => server !== record
+				&& normalizeServerUrl(server.serverUrl) === normalizeServerUrl(nextServerUrl),
+		);
+
+		const updated = {
+			...(authData || record),
+			serverUrl: nextServerUrl,
+			serverName: nextServerName || serverInfo?.ServerName || record.serverName,
+			serverVersion: serverInfo?.Version || record.serverVersion,
+		};
+
+		try {
+			if (duplicate) {
+				// The edited address is already saved: drop this row so the same
+				// server is never stored twice, keeping the existing entry (and
+				// all of its cached content) untouched.
+				await removeStoredJellyfinServer(record.serverUrl);
+				setServers((current) => current.filter(
+					(server) => normalizeServerUrl(server.serverUrl) !== normalizeServerUrl(record.serverUrl),
+				));
+				if (isActive) {
+					await saveStoredJellyfinSession(duplicate);
+					setSession(duplicate);
+				}
+				await recordAppLog("info", "jellyfin", "Merged duplicate Jellyfin server entry", {
+					removedServerUrl: record.serverUrl,
+					keptServerUrl: duplicate.serverUrl,
+				});
+				toast.success(`Merged into ${duplicate.serverName || duplicate.serverUrl}`);
+				return { success: true };
+			}
+
+			let cacheOutcome = { addressChanged, migratedCacheEntries: 0, removedCacheEntries: 0 };
+			// Same install at a new address → carry the cache over. A different
+			// install or a different account means the cached content cannot be
+			// reused: purge it instead of migrating it under the new key.
+			const canReuseCache = isSameServer && !userIdChanged;
+			if (addressChanged && !canReuseCache) {
+				cacheOutcome = await purgeJellyfinServerCache(record.serverUrl);
+			} else if (!addressChanged && userIdChanged) {
+				cacheOutcome = await purgeJellyfinServerCache(record.serverUrl);
+			}
+			await updateStoredJellyfinServer(record.serverUrl, updated);
+			setServers((current) => current.map(
+				(server) => (normalizeServerUrl(server.serverUrl) === normalizeServerUrl(record.serverUrl)
+					? updated
+					: server),
+			));
+			if (isActive) {
+				await saveStoredJellyfinSession(updated);
+				setSession(updated);
+				if ((addressChanged && !isSameServer) || userIdChanged) {
+					// What is on screen belongs to the previous server content.
+					setTracks([]);
+					setRecentlyPlayed([]);
+					setGenres([]);
+					setLibraryVersion((version) => version + 1);
+					await loadLibrary(updated, { forceRefresh: true });
+				}
+			}
+			await recordAppLog("info", "jellyfin", "Updated saved Jellyfin server", {
+				fromServerUrl: record.serverUrl,
+				toServerUrl: updated.serverUrl,
+				addressChanged,
+				credentialsChanged,
+				userIdChanged,
+				migratedCacheEntries: cacheOutcome.migratedCacheEntries ?? 0,
+				removedCacheEntries: cacheOutcome.removedCacheEntries ?? 0,
+			});
+			toast.success(addressChanged
+				? `Server updated to ${updated.serverUrl}`
+				: "Server updated");
+			return { success: true };
+		} catch (error) {
+			console.error("Could not update the Jellyfin server:", error);
+			await recordAppLog("error", "jellyfin", "Updating Jellyfin server failed", {
+				message: error.message,
+				serverUrl: record.serverUrl,
+			});
+			toast.error("Could not update server");
+			return { success: false, error: error.message };
+		}
+	}, [servers, session, loadLibrary]);
+
 	const reportPlaybackEvent = useCallback(async (event, itemId, state) => {
 		if (!session?.accessToken || !session?.serverUrl || !session?.userId) return false;
 
@@ -484,6 +648,10 @@ export function JellyfinProvider({ children }) {
 				servers,
 				switchServer,
 				removeServer,
+				editingServer,
+				openEditServerModal,
+				closeEditServerModal,
+				updateServer,
 				connectionStatus,
 				refreshMostPlayed,
 				refreshRecentlyPlayed,

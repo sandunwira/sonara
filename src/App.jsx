@@ -8,6 +8,7 @@ import WindowFunctionalities from './utils/WindowFunctionalities';
 import { PlayerProvider } from './context/PlayerContext';
 import { JellyfinProvider } from './context/JellyfinContext';
 import ServerModal from './components/modals/ServerModal';
+import EditServerModal from './components/modals/EditServerModal';
 import AppErrorBoundary from './components/AppErrorBoundary';
 
 import HomePage from "./pages/Home";
@@ -24,6 +25,7 @@ function AppRoutes() {
 			<PlayerProvider>
 				<WindowFunctionalities />
 				<ServerModal />
+				<EditServerModal />
 
 				<div className="h-screen flex flex-col bg-zinc-950 text-white/85 select-none">
 					<Router>
