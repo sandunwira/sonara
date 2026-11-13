@@ -119,57 +119,6 @@ function Sidebar() {
 					</div>
 				</div>
 			</div>
-
-			{/* Bottom Jellyfin Server Connection Bar */}
-			{/* <div className="border-t border-[#1b1b22] bg-[#0c0c0f] p-2.5">
-				<div className={`flex w-full items-center gap-1 rounded-xs border p-1 transition ${isAuthenticated
-						? "border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-zinc-200"
-						: "border-zinc-800 bg-[#141419] hover:bg-[#1c1c24] text-zinc-300"
-						}`}
-				>
-					<button
-						type="button"
-						onClick={openServerModal}
-						className="flex min-w-0 flex-1 items-center justify-between rounded-xs p-1.5 text-left"
-					>
-						<div className="flex min-w-0 items-center gap-2">
-							<IconServer
-								size={15}
-								className={isAuthenticated ? "shrink-0 text-emerald-400" : "shrink-0 text-zinc-400"}
-							/>
-							<div className="flex min-w-0 flex-col">
-								<span className="truncate text-xs font-medium">
-									{isAuthenticated ? (session?.serverName || "Jellyfin") : "Connect Server"}
-								</span>
-								<span className="truncate text-[10px] text-zinc-500">
-									{isAuthenticated ? (isOffline ? "Offline — cached data" : session?.username) : "Jellyfin audio"}
-								</span>
-							</div>
-						</div>
-
-						<span
-							className={`ml-1.5 h-2 w-2 shrink-0 rounded-full ${isOffline
-									? "bg-amber-500 shadow-sm shadow-amber-500/50"
-									: isAuthenticated
-										? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
-										: "bg-zinc-600"
-								}`}
-						/>
-					</button>
-					{isAuthenticated && (
-						<button
-							type="button"
-							onClick={syncLibrary}
-							disabled={isSyncingLibrary}
-							title="Sync Library"
-							aria-label="Sync Library"
-							className="shrink-0 rounded-xs p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							<IconRefresh size={14} className={isSyncingLibrary ? "animate-spin" : ""} />
-						</button>
-					)}
-				</div>
-			</div> */}
 		</aside>
 	);
 }

@@ -5,9 +5,7 @@ import { recordAppLog } from "../services/jellyfinCache";
 
 const appWindow = Window.getCurrent();
 
-// Dedicated error title bar, independent from the app's contexts/providers —
-// a crash may originate there, so this must not depend on usePlayer/useJellyfin.
-// It keeps the window movable and closable while the error screen is shown.
+// Dedicated error title bar, independent from the app's contexts/providers - a crash may originate there, so this must not depend on usePlayer/useJellyfin. It keeps the window movable and closable while the error screen is shown.
 class ErrorTitleBar extends Component {
 	handleMinimize = () => appWindow.minimize();
 	handleMaximize = () => appWindow.toggleMaximize();

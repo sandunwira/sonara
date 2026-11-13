@@ -14,7 +14,7 @@ import { normalizeServerUrl } from "../services/jellyfinCache";
 const CONNECTION_STATUS_META = {
 	ok: { label: "Connected to Jellyfin", className: "text-emerald-500" },
 	weak: { label: "Weak connection to Jellyfin", className: "text-amber-500" },
-	offline: { label: "Offline — Jellyfin server unreachable", className: "text-zinc-600" },
+	offline: { label: "Offline - Jellyfin server unreachable", className: "text-zinc-600" },
 	checking: { label: "Checking connection", className: "text-zinc-500" },
 };
 

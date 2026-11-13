@@ -123,10 +123,7 @@ export function JellyfinProvider({ children }) {
 		};
 	}, []);
 
-	// Periodically probe the real server (bypassing the local cache) to keep
-	// the title bar connection indicator accurate. Distinct from isOffline
-	// (browser network state) — a reachable-but-slow or auth-broken server is
-	// reported as "weak" here, an unreachable one as "offline".
+	// Periodically probe the real server (bypassing the local cache) to keep the title bar connection indicator accurate. Distinct from isOffline (browser network state) - a reachable-but-slow or auth-broken server is reported as "weak" here, an unreachable one as "offline".
 	const connectionStatusRef = useRef("checking");
 	useEffect(() => {
 		if (!session?.serverUrl) {

@@ -179,7 +179,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						<IconRepeat size={14} stroke={2} />
 					</button>
 
-					{/* Playlist / Queue — toggles the collapsible right panel */}
+					{/* Playlist / Queue - toggles the collapsible right panel */}
 					<button
 						type="button"
 						onClick={toggleQueuePanel}
