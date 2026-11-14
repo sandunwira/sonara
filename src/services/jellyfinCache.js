@@ -460,6 +460,49 @@ export async function saveStoredLyrics(artist, title, lyrics) {
 	);
 }
 
+// Locally generated library collage thumbnails (square JPEG data URLs). These live only in the app database and are never pushed to Jellyfin.
+export async function getStoredLibraryThumbnails() {
+	const database = await getDatabase();
+	if (!database) return new Map();
+
+	const rows = await database.select("SELECT library_id, data, generated_at FROM library_thumbnails");
+	const thumbnails = new Map();
+	for (const row of rows) {
+		try {
+			const parsed = JSON.parse(row.data);
+			if (parsed?.dataUrl) {
+				thumbnails.set(row.library_id, {
+					dataUrl: parsed.dataUrl,
+					kind: parsed.kind || null,
+					generatedAt: row.generated_at || null,
+				});
+			}
+		} catch {
+			// Corrupt rows are ignored; generation will rebuild them.
+		}
+	}
+	return thumbnails;
+}
+
+export async function getStoredLibraryThumbnail(libraryId) {
+	const thumbnails = await getStoredLibraryThumbnails();
+	return thumbnails.get(libraryId)?.dataUrl || null;
+}
+
+export async function saveStoredLibraryThumbnail(libraryId, dataUrl, generatedAt, kind = null) {
+	const database = await getDatabase();
+	if (!database) {
+		throw new Error("Library thumbnail storage requires the Sonara desktop app");
+	}
+
+	await database.execute(
+		`INSERT INTO library_thumbnails (library_id, data, generated_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT(library_id) DO UPDATE SET data = excluded.data, generated_at = excluded.generated_at`,
+		[libraryId, JSON.stringify({ kind, dataUrl }), generatedAt],
+	);
+}
+
 export async function getStoredJellyfinSession() {
 	const database = await getDatabase();
 	if (!database) return null;

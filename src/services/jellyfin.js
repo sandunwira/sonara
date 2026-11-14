@@ -7,6 +7,7 @@ import {
 	startJellyfinSyncCapture,
 	cancelJellyfinSyncCapture,
 	finishJellyfinSyncCapture,
+	getStoredLibraryThumbnails,
 } from "./jellyfinCache";
 
 const CLIENT_NAME = "Sonara";
@@ -155,7 +156,7 @@ while (startIndex < totalRecordCount) {
 			SortOrder: sortOrder,
 			StartIndex: String(startIndex),
 			Limit: String(limit),
-			Fields: "MediaSources,MediaStreams,PrimaryImageAspectRatio,Genres,GenreItems,AlbumId,ArtistItems,Artists,UserData,Path",
+			Fields: "MediaSources,MediaStreams,PrimaryImageAspectRatio,Genres,GenreItems,AlbumId,ArtistItems,Artists,UserData,Path,DateCreated",
 		});
 		if (parentId) params.set("ParentId", parentId);
 		if (artistId) params.set("ArtistIds", artistId);
@@ -335,6 +336,7 @@ export async function fetchMusicLibraries(serverUrl, userId, token, { forceRefre
 	const base = cleanUrl(serverUrl);
 	const params = new URLSearchParams({ userId });
 	let res;
+	let entities;
 	try {
 		res = await fetchCachedJellyfinJson(`${base}/UserViews?${params}`, getAuthHeaders(token), { forceRefresh });
 	} catch (error) {
@@ -343,15 +345,28 @@ export async function fetchMusicLibraries(serverUrl, userId, token, { forceRefre
 		const libraries = cachedItems.filter((item) => item.Type === "CollectionFolder"
 			&& (!item.CollectionType || item.CollectionType === "music"));
 		if (libraries.length === 0) throw error;
-		return libraries.map((item) => formatJellyfinEntity(base, item, token));
+		entities = libraries.map((item) => formatJellyfinEntity(base, item, token));
 	}
-	if (!res.ok) {
-		throw new Error(`Failed to fetch music libraries (${res.status})`);
+	if (!entities) {
+		if (!res.ok) {
+			throw new Error(`Failed to fetch music libraries (${res.status})`);
+		}
+		const data = await res.json();
+		entities = (data.Items || [])
+			.filter((item) => !item.CollectionType || item.CollectionType === "music")
+			.map((item) => formatJellyfinEntity(base, item, token));
 	}
-	const data = await res.json();
-	return (data.Items || [])
-		.filter((item) => !item.CollectionType || item.CollectionType === "music")
-		.map((item) => formatJellyfinEntity(base, item, token));
+
+	// Attach locally generated collage thumbnails where present. These live
+	// only in the app database and are never pushed to Jellyfin.
+	const thumbnails = await getStoredLibraryThumbnails();
+	if (thumbnails.size > 0) {
+		for (const library of entities) {
+			const storedThumbnail = thumbnails.get(library.id);
+			if (storedThumbnail) library.cover = storedThumbnail.dataUrl;
+		}
+	}
+	return entities;
 }
 
 export async function fetchMusicItem(serverUrl, userId, token, itemId, { forceRefresh = false } = {}) {
@@ -542,7 +557,7 @@ const GENRE_COLORS = [
 	"#10b981", "#fb7185"
 ];
 
-function getRandomGenreColor(name) {
+export function getRandomGenreColor(name) {
 	if (!name) return GENRE_COLORS[0];
 	let hash = 0;
 	for (let i = 0; i < name.length; i++) {

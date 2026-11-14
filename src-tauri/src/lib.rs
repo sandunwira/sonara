@@ -80,6 +80,16 @@ pub fn run() {
             sql: "CREATE INDEX IF NOT EXISTS jellyfin_responses_fetched_at_idx ON jellyfin_responses(fetched_at);",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "create_library_thumbnail_storage",
+            sql: "CREATE TABLE IF NOT EXISTS library_thumbnails (
+                library_id TEXT PRIMARY KEY NOT NULL,
+                data TEXT NOT NULL,
+                generated_at TEXT NOT NULL
+            );",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

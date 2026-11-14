@@ -110,7 +110,7 @@ export default function LibraryCollectionPage({
 							type="button"
 							onClick={() => navigate(detailPath)}
 							aria-label={`Back to ${title}`}
-							className="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white"
+							className="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white cursor-pointer"
 						>
 							<IconChevronLeft size={16} />
 						</button>
@@ -120,9 +120,11 @@ export default function LibraryCollectionPage({
 							<Icon size={19} stroke={1.7} />
 							<h1 className="text-xl font-bold tracking-tight text-white">{pageTitle}</h1>
 						</div>
-						<span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
-							{visibleItems.length}
-						</span>
+						{!isLoading && !error && (
+							<span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
+								{visibleItems.length}
+							</span>
+						)}
 					</div>
 				</div>
 
@@ -223,18 +225,34 @@ export default function LibraryCollectionPage({
 								key={item.id}
 								type="button"
 								onClick={() => navigate(`${detailPath}/${item.id}`, { state: { title: item.title || item.name } })}
-								className="group min-w-0 text-left"
+								className="min-w-0 text-left group"
 							>
-								<div className={`relative aspect-square overflow-hidden rounded-xs border border-[#22222a] bg-[#141419] ${isFolderList ? "flex items-center justify-center" : ""}`}>
-									{isFolderList ? (
-										<Icon size={48} stroke={1.2} className="text-zinc-500 transition group-hover:text-blue-400" />
+								<div className={`relative aspect-square rounded-xs border border-[#22222a] bg-[#141419] brightness-90 grayscale-60 group-hover:grayscale-0 group-hover:brightness-100 group-focus:outline-none group-focus-visible:brightness-100 transition-all duration-200 ${isFolderList && !item.cover ? "flex items-center justify-center" : ""}`}>
+									{isFolderList && item.cover ? (
+										<Artwork src={item.cover} alt={item.title || item.name} className="h-full w-full object-cover cursor-pointer" />
+									) : isFolderList ? (
+										<Icon size={48} stroke={1.2} className="text-zinc-300 group-hover:text-white transition-all duration-200 cursor-pointer" />
 									) : (
-										<Artwork src={item.cover} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+										<Artwork src={item.cover} alt="" className="h-full w-full object-cover cursor-pointer" />
 									)}
 								</div>
-								<span className="mt-2 block truncate text-xs font-semibold text-zinc-100 group-hover:text-white">
-									{item.title || item.name}
-								</span>
+								<div className="mt-2 flex flex-row items-center justify-between">
+									<span className="block truncate text-xs font-semibold text-zinc-300 group-hover:text-white transition-all duration-200 cursor-pointer" title={item.title || item.name}>
+										{item.title || item.name}
+									</span>
+									{/* Options Dropdown */}
+									<button
+										type="button"
+										onClick={(event) => {
+											event.stopPropagation();
+											// Handle more actions for the item (e.g., show a dropdown menu)
+										}}
+										aria-label="More actions"
+										className="text-zinc-400 hover:text-white p-1 cursor-pointer transition"
+									>
+										<IconDotsVertical size={14} stroke={1.5} />
+									</button>
+								</div>
 							</button>
 						))}
 					</div>
@@ -251,82 +269,82 @@ export default function LibraryCollectionPage({
 					{visibleItems.map((track, index) => {
 						const albumLink = getTrackAlbumLink(track);
 						return (
-						<div
-							key={track.id}
-							role="button"
-							tabIndex={0}
-							onClick={() => playFromList(track)}
-							onKeyDown={(event) => {
-								if (event.key === "Enter" || event.key === " ") {
-									event.preventDefault();
-									playFromList(track);
-								}
-							}}
-							aria-label={`Play ${track.title || "track"}`}
-							className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
-						>
-							<span className="block text-[11px] text-zinc-600">{index + 1}</span>
-							<span className="flex min-w-0 items-center gap-3">
-								<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
-								<span className="min-w-0">
-									<span
-										onClick={(event) => {
-											event.stopPropagation();
-											navigate(`/tracks/${track.id}`, { state: { track } });
-										}}
-										title="View track details"
-										className="block truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
-									>
-										{track.title}
-									</span>
-									{track.raw?.ArtistItems?.[0]?.Id ? (
+							<div
+								key={track.id}
+								role="button"
+								tabIndex={0}
+								onClick={() => playFromList(track)}
+								onKeyDown={(event) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										playFromList(track);
+									}
+								}}
+								aria-label={`Play ${track.title || "track"}`}
+								className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
+							>
+								<span className="block text-[11px] text-zinc-600">{index + 1}</span>
+								<span className="flex min-w-0 items-center gap-3">
+									<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
+									<span className="min-w-0">
 										<span
 											onClick={(event) => {
 												event.stopPropagation();
-												navigate(`/artists/${track.raw.ArtistItems[0].Id}`, { state: { title: track.artist } });
+												navigate(`/tracks/${track.id}`, { state: { track } });
 											}}
-											title="View artist details"
-											className="block truncate text-[11px] font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
-											{track.artist}
+											title="View track details"
+											className="block truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+										>
+											{track.title}
+										</span>
+										{track.raw?.ArtistItems?.[0]?.Id ? (
+											<span
+												onClick={(event) => {
+													event.stopPropagation();
+													navigate(`/artists/${track.raw.ArtistItems[0].Id}`, { state: { title: track.artist } });
+												}}
+												title="View artist details"
+												className="block truncate text-[11px] font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+												{track.artist}
+											</span>
+										) : (
+											<span className="block truncate text-[11px] font-light text-zinc-400">
+												{track.artist}
+											</span>
+										)}
+									</span>
+								</span>
+								<span className="block">
+									{albumLink ? (
+										<span
+											onClick={(event) => {
+												event.stopPropagation();
+												navigate(`/albums/${albumLink.id}`, { state: { title: albumLink.title } });
+											}}
+											title="View album"
+											className="block cursor-pointer truncate text-xs text-zinc-500 hover:text-white hover:underline underline-offset-2"
+										>
+											{track.album}
 										</span>
 									) : (
-										<span className="block truncate text-[11px] font-light text-zinc-400">
-											{track.artist}
-										</span>
+										<span className="block truncate text-xs text-zinc-500">{track.album}</span>
 									)}
 								</span>
-							</span>
-							<span className="block">
-								{albumLink ? (
-									<span
+								<span className="text-right text-[11px] text-zinc-500">{formatDuration(track.duration)}</span>
+								<span className="flex justify-end">
+									<button
+										type="button"
 										onClick={(event) => {
 											event.stopPropagation();
-											navigate(`/albums/${albumLink.id}`, { state: { title: albumLink.title } });
+											// Handle more actions for the track (e.g., show a dropdown menu)
 										}}
-										title="View album"
-										className="block cursor-pointer truncate text-xs text-zinc-500 hover:text-white hover:underline underline-offset-2"
+										aria-label="More actions"
+										className="text-zinc-400 hover:text-white p-0.5 cursor-pointer transition"
 									>
-										{track.album}
-									</span>
-								) : (
-									<span className="block truncate text-xs text-zinc-500">{track.album}</span>
-								)}
-							</span>
-							<span className="text-right text-[11px] text-zinc-500">{formatDuration(track.duration)}</span>
-							<span className="flex justify-end">
-								<button
-									type="button"
-									onClick={(event) => {
-										event.stopPropagation();
-										// Handle more actions for the track (e.g., show a dropdown menu)
-									}}
-									aria-label="More actions"
-									className="text-zinc-400 hover:text-white p-0.5 cursor-pointer transition"
-								>
-									<IconDotsVertical size={14} stroke={1.5} />
-								</button>
-							</span>
-						</div>
+										<IconDotsVertical size={14} stroke={1.5} />
+									</button>
+								</span>
+							</div>
 						);
 					})}
 				</div>
