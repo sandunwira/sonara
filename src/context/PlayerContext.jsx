@@ -41,7 +41,9 @@ export function PlayerProvider({ children }) {
 	const [volume, setVolumeState] = useState(85);
 	const [isMuted, setIsMuted] = useState(false);
 	const [isShuffle, setIsShuffle] = useState(false);
-	const [isRepeat, setIsRepeat] = useState(false);
+	// Repeat playback: "off" (no repeat), "all" (loop the queue), or "one"
+	// (loop the current track).
+	const [repeatMode, setRepeatMode] = useState("off");
 	const [queue, setQueue] = useState([]);
 	const [queueIndex, setQueueIndex] = useState(-1);
 	// Where the current playback originated (e.g. a genre card). Genre cards
@@ -52,7 +54,7 @@ export function PlayerProvider({ children }) {
 	const queueRestoredRef = useRef(false);
 	const queueRef = useRef(queue);
 	const queueIndexRef = useRef(queueIndex);
-	const isRepeatRef = useRef(isRepeat);
+	const isRepeatRef = useRef(repeatMode);
 	const audioRef = useRef(null);
 	const reportedTrackIdRef = useRef(null);
 	const activePlaybackTrackRef = useRef(null);
@@ -64,7 +66,7 @@ export function PlayerProvider({ children }) {
 	currentTrackRef.current = currentTrack;
 	queueRef.current = queue;
 	queueIndexRef.current = queueIndex;
-	isRepeatRef.current = isRepeat;
+	isRepeatRef.current = repeatMode;
 	playbackReporterRef.current = { reportTrackPlayed, reportPlaybackEvent };
 
 	const updateQueue = (nextQueue, nextIndex) => {
@@ -249,11 +251,12 @@ export function PlayerProvider({ children }) {
 		const onEnded = () => {
 			const endedTrack = activePlaybackTrackRef.current;
 			stopPlaybackReporting();
-			if (isRepeatRef.current) {
+			if (isRepeatRef.current === "one") {
 				audio.currentTime = 0;
 				audio.play().then(() => startPlaybackReporting(endedTrack)).catch(() => { });
 			} else {
-				nextTrackRef.current?.();
+				// "all" wraps back to the queue's first track; "off" stops at the end.
+				nextTrackRef.current?.({ wrap: isRepeatRef.current === "all" });
 			}
 		};
 
@@ -543,9 +546,16 @@ export function PlayerProvider({ children }) {
 		}
 	};
 
-	const nextTrack = () => {
+	const nextTrack = ({ wrap = false } = {}) => {
 		const currentQueue = queueRef.current;
-		if (currentQueue.length === 0 || queueIndexRef.current >= currentQueue.length - 1) return;
+		if (currentQueue.length === 0) return;
+		if (queueIndexRef.current >= currentQueue.length - 1) {
+			// End of the queue: stop unless repeating the whole queue.
+			if (!wrap) return;
+			updateQueue(currentQueue, 0);
+			startTrack(currentQueue[0]);
+			return;
+		}
 		let nextIdx;
 		if (isShuffle) {
 			nextIdx = Math.floor(Math.random() * (currentQueue.length - queueIndexRef.current - 1))
@@ -680,7 +690,8 @@ export function PlayerProvider({ children }) {
 	}, [currentTime, duration]);
 
 	const toggleShuffle = () => setIsShuffle((prev) => !prev);
-	const toggleRepeat = () => setIsRepeat((prev) => !prev);
+	// Cycles repeat: off → all (loop queue) → one (loop track) → off.
+	const toggleRepeat = () => setRepeatMode((mode) => (mode === "off" ? "all" : mode === "all" ? "one" : "off"));
 
 	// Format: [<playing or paused>] Track Title — Artist — Sonara
 	const title = currentTrack?.title
@@ -697,7 +708,7 @@ export function PlayerProvider({ children }) {
 				volume,
 				isMuted,
 				isShuffle,
-				isRepeat,
+				repeatMode,
 				queue,
 				queueIndex,
 				playbackSource,
@@ -737,7 +748,7 @@ export function usePlayer() {
 			volume: 85,
 			isMuted: false,
 			isShuffle: false,
-			isRepeat: false,
+			repeatMode: "off",
 			queue: [],
 			queueIndex: -1,
 			playbackSource: null,

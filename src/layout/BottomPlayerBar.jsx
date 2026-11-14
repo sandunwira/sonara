@@ -6,7 +6,8 @@ import {
 	IconPlayerPlayFilled,
 	IconPlayerPauseFilled,
 	IconRepeat,
-	IconPlaylist,
+	IconRepeatOnce,
+	IconLayoutList,
 	IconPictureInPicture,
 	IconDeviceSpeaker,
 	IconHeart,
@@ -39,7 +40,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 		toggleMute,
 		isShuffle,
 		toggleShuffle,
-		isRepeat,
+		repeatMode,
 		toggleRepeat,
 		togglePlay,
 		nextTrack,
@@ -163,31 +164,18 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						<IconPlayerSkipForwardFilled size={13} />
 					</button>
 
-					{/* Repeat */}
+					{/* Repeat: off → repeat all → repeat one */}
 					<button
 						type="button"
 						onClick={toggleRepeat}
-						aria-label="Toggle repeat"
-						className={`transition hover:scale-110 ${isRepeat ? "text-blue-500" : "text-zinc-400 hover:text-white"
+						aria-label={repeatMode === "one" ? "Repeat: one track" : repeatMode === "all" ? "Repeat: all" : "Repeat: off"}
+						title={repeatMode === "one" ? "Repeating one track" : repeatMode === "all" ? "Repeating queue" : "Repeat off"}
+						className={`transition hover:scale-110 ${repeatMode !== "off" ? "text-blue-500" : "text-zinc-400 hover:text-white"
 							}`}
 					>
-						<IconRepeat size={14} stroke={2} />
-					</button>
-
-					{/* Playlist / Queue - toggles the collapsible right panel */}
-					<button
-						type="button"
-						onClick={toggleQueuePanel}
-						aria-label="View queue"
-						aria-expanded={isQueuePanelOpen}
-						className={`relative text-zinc-400 transition hover:scale-110 hover:text-white ${isQueuePanelOpen ? "text-white" : ""}`}
-					>
-						<IconPlaylist size={14} stroke={2} />
-						{upcomingTracks.length > 0 && (
-							<span className="absolute -right-1.5 -top-1.5 min-w-3 rounded-full bg-blue-500 px-0.5 text-center text-[8px] leading-3 text-white">
-								{upcomingTracks.length}
-							</span>
-						)}
+						{repeatMode === "one"
+							? <IconRepeatOnce size={14} stroke={2} />
+							: <IconRepeat size={14} stroke={2} />}
 					</button>
 				</div>
 
@@ -220,6 +208,22 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 
 			{/* Right auxiliary tools & volume */}
 			<div className="flex w-1/4 min-w-50 items-center justify-end gap-3 text-zinc-400">
+				{/* Playlist / Queue - toggles the collapsible right panel */}
+				<button
+					type="button"
+					onClick={toggleQueuePanel}
+					aria-label="View queue"
+					aria-expanded={isQueuePanelOpen}
+					className={`relative text-zinc-400 transition hover:text-white ${isQueuePanelOpen ? "text-white" : ""}`}
+				>
+					<IconLayoutList size={14} stroke={1.8} />
+					{upcomingTracks.length > 0 && (
+						<span className="absolute -right-1.5 -top-1.5 min-w-3 rounded-full bg-blue-500 px-0.5 text-center text-[8px] leading-3 text-white">
+							{upcomingTracks.length}
+						</span>
+					)}
+				</button>
+
 				{/* Favorite */}
 				<button
 					type="button"
