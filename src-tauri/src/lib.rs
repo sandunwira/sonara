@@ -74,6 +74,12 @@ pub fn run() {
             sql: "ALTER TABLE jellyfin_responses ADD COLUMN fetched_at TEXT;",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "index_response_cache_by_fetched_at",
+            sql: "CREATE INDEX IF NOT EXISTS jellyfin_responses_fetched_at_idx ON jellyfin_responses(fetched_at);",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
