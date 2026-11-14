@@ -232,7 +232,78 @@ export async function fetchMusicAlbums(serverUrl, userId, token, { forceRefresh 
 			forceRefresh,
 		}),
 	));
-	return [...new Map(albumsByLibrary.flat().map((album) => [album.id, album])).values()];
+	const flatAlbums = [...new Map(albumsByLibrary.flat().map((album) => [album.id, album])).values()];
+	if (flatAlbums.length > 0) return flatAlbums;
+
+	// Folder-based music libraries have no MusicAlbum entities, so the
+	// server cannot return albums at all. Group the track list on its
+	// Album tag AND album artist, and serve virtual album entities
+	// instead, keeping the Albums page and track-to-album links
+	// functional while letting different artists share an album name.
+	const allTracks = await fetchMusicCollection(serverUrl, userId, token, { forceRefresh });
+	const groups = new Map();
+	for (const track of allTracks) {
+		const name = track.album?.trim();
+		if (!name || name.toLowerCase() === "unknown album") continue;
+		const artistId = track.raw?.AlbumArtists?.[0]?.Id
+			|| track.raw?.ArtistItems?.[0]?.Id
+			|| "";
+		const groupKey = `${artistId}|${name.toLowerCase()}`;
+		if (!groups.has(groupKey)) groups.set(groupKey, []);
+		groups.get(groupKey).push(track);
+	}
+	return [...groups.values()].map((albumTracks) => {
+		const first = albumTracks[0];
+		const name = first.album.trim();
+		const artistId = first.raw?.AlbumArtists?.[0]?.Id || first.raw?.ArtistItems?.[0]?.Id || null;
+		return {
+			id: makeVirtualAlbumId(name, artistId),
+			title: name,
+			name,
+			artist: first.raw?.AlbumArtists?.[0]?.Name || first.artist || "",
+			cover: first.cover || null,
+			isJellyfin: true,
+			isVirtual: true,
+			raw: {},
+		};
+	});
+}
+
+// Virtual album ids encode the album's artist id and name
+// ("album:<artistId>@<encoded name>") so that two different artists may
+// share an album name without their pages merging. The artist id comes
+// first because it is always a 32-char hex string (or empty), so the
+// first "@" is unambiguously the separator. Jellyfin item ids are also
+// 32-char hex strings, so the "album:" prefix can never collide.
+export function makeVirtualAlbumId(albumName, artistId = null) {
+	return `album:${artistId || ""}@${encodeURIComponent(albumName)}`;
+}
+
+export function getVirtualAlbumName(albumId) {
+	if (typeof albumId !== "string" || !albumId.startsWith("album:")) return null;
+	const rest = albumId.slice("album:".length);
+	const separatorIndex = rest.indexOf("@");
+	if (separatorIndex === -1) return null;
+	const artistId = rest.slice(0, separatorIndex) || null;
+	const name = rest.slice(separatorIndex + 1);
+	return name ? { name, artistId } : null;
+}
+
+// Resolves the album page a track should link to: the real album entity
+// when Jellyfin provides an AlbumId, otherwise a virtual album keyed on
+// the track's Album tag and album artist (so same-named albums by
+// different artists stay separate). Returns null when there is nothing
+// to link to.
+export function getTrackAlbumLink(track) {
+	if (track?.albumId && /^[0-9a-f]{32}$/i.test(track.albumId)) {
+		return { id: track.albumId, title: track.album || "" };
+	}
+	const name = track?.album?.trim();
+	if (!name || name.toLowerCase() === "unknown album") return null;
+	const artistId = track?.raw?.AlbumArtists?.[0]?.Id
+		|| track?.raw?.ArtistItems?.[0]?.Id
+		|| null;
+	return { id: makeVirtualAlbumId(name, artistId), title: name };
 }
 
 export async function fetchMusicArtists(serverUrl, userId, token, { forceRefresh = false } = {}) {

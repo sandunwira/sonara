@@ -150,7 +150,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						{isPlaying ? (
 							<IconPlayerPauseFilled size={13} />
 						) : (
-							<IconPlayerPlayFilled size={13} className="ml-0.5" />
+							<IconPlayerPlayFilled size={13} />
 						)}
 					</button>
 

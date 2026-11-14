@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { IconChevronLeft, IconSearch, IconServer } from "@tabler/icons-react";
+import { IconChevronLeft, IconSearch, IconServer, IconDotsVertical } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
-import { fetchMusicCollection, fetchMusicItem } from "../services/jellyfin";
+import { fetchMusicCollection, fetchMusicItem, getTrackAlbumLink } from "../services/jellyfin";
 import useGenrePlayback from "../hooks/useGenrePlayback";
 import GenrePlayButton from "../components/GenrePlayButton";
 import Artwork from "../components/Artwork";
@@ -244,30 +244,91 @@ export default function LibraryCollectionPage({
 					<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 border-b border-[#22222a] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]">
 						<span className="hidden sm:block">#</span>
 						<span>Title</span>
-						<span className="hidden sm:block">Artist</span>
 						<span className="hidden sm:block">Album</span>
 						<span className="text-right">Time</span>
+						<span></span>
 					</div>
-					{visibleItems.map((track, index) => (
-						<button
+					{visibleItems.map((track, index) => {
+						const albumLink = getTrackAlbumLink(track);
+						return (
+						<div
 							key={track.id}
-							type="button"
+							role="button"
+							tabIndex={0}
 							onClick={() => playFromList(track)}
-							className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
+							onKeyDown={(event) => {
+								if (event.key === "Enter" || event.key === " ") {
+									event.preventDefault();
+									playFromList(track);
+								}
+							}}
+							aria-label={`Play ${track.title || "track"}`}
+							className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
 						>
-							<span className="hidden text-[11px] text-zinc-600 sm:block">{index + 1}</span>
-							<span className="flex min-w-0 items-center gap-2">
+							<span className="block text-[11px] text-zinc-600">{index + 1}</span>
+							<span className="flex min-w-0 items-center gap-3">
 								<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
 								<span className="min-w-0">
-									<span className="block truncate text-xs font-medium text-zinc-200">{track.title}</span>
-									<span className="block truncate text-[10px] text-zinc-500 sm:hidden">{track.artist}</span>
+									<span
+										onClick={(event) => {
+											event.stopPropagation();
+											navigate(`/tracks/${track.id}`, { state: { track } });
+										}}
+										title="View track details"
+										className="block truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+									>
+										{track.title}
+									</span>
+									{track.raw?.ArtistItems?.[0]?.Id ? (
+										<span
+											onClick={(event) => {
+												event.stopPropagation();
+												navigate(`/artists/${track.raw.ArtistItems[0].Id}`, { state: { title: track.artist } });
+											}}
+											title="View artist details"
+											className="block truncate text-[11px] font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+											{track.artist}
+										</span>
+									) : (
+										<span className="block truncate text-[11px] font-light text-zinc-400">
+											{track.artist}
+										</span>
+									)}
 								</span>
 							</span>
-							<span className="hidden truncate text-xs text-zinc-400 sm:block">{track.artist}</span>
-							<span className="hidden truncate text-xs text-zinc-500 sm:block">{track.album}</span>
+							<span className="block">
+								{albumLink ? (
+									<span
+										onClick={(event) => {
+											event.stopPropagation();
+											navigate(`/albums/${albumLink.id}`, { state: { title: albumLink.title } });
+										}}
+										title="View album"
+										className="block cursor-pointer truncate text-xs text-zinc-500 hover:text-white hover:underline underline-offset-2"
+									>
+										{track.album}
+									</span>
+								) : (
+									<span className="block truncate text-xs text-zinc-500">{track.album}</span>
+								)}
+							</span>
 							<span className="text-right text-[11px] text-zinc-500">{formatDuration(track.duration)}</span>
-						</button>
-					))}
+							<span className="flex justify-end">
+								<button
+									type="button"
+									onClick={(event) => {
+										event.stopPropagation();
+										// Handle more actions for the track (e.g., show a dropdown menu)
+									}}
+									aria-label="More actions"
+									className="text-zinc-400 hover:text-white p-0.5 cursor-pointer transition"
+								>
+									<IconDotsVertical size={14} stroke={1.5} />
+								</button>
+							</span>
+						</div>
+						);
+					})}
 				</div>
 			)}
 		</div>

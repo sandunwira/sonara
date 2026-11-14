@@ -15,6 +15,9 @@ import HomePage from "./pages/Home";
 import FavoritesPage from "./pages/Favorites";
 import AlbumsPage from "./pages/Albums";
 import TracksPage from "./pages/Tracks";
+import TrackDetailPage from "./pages/TrackDetailPage";
+import AlbumDetailPage from "./pages/AlbumDetailPage";
+import ArtistDetailPage from "./pages/ArtistDetailPage";
 import ArtistsPage from "./pages/Artists";
 import GenresPage from "./pages/Genres";
 import FoldersPage from "./pages/Folders";
@@ -37,10 +40,11 @@ function AppRoutes() {
 									<Route path="/" element={<HomePage />} />
 									<Route path="/favorites" element={<FavoritesPage />} />
 									<Route path="/albums" element={<AlbumsPage />} />
-									<Route path="/albums/:albumId" element={<AlbumsPage />} />
+									<Route path="/albums/:albumId" element={<AlbumDetailPage />} />
 									<Route path="/tracks" element={<TracksPage />} />
+									<Route path="/tracks/:trackId" element={<TrackDetailPage />} />
 									<Route path="/artists" element={<ArtistsPage />} />
-									<Route path="/artists/:artistId" element={<ArtistsPage />} />
+									<Route path="/artists/:artistId" element={<ArtistDetailPage />} />
 									<Route path="/genres" element={<GenresPage />} />
 									<Route path="/genres/:genreId" element={<GenresPage />} />
 									<Route path="/folders" element={<FoldersPage />} />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
 	IconChevronDown,
 	IconChevronUp,
@@ -9,6 +10,7 @@ import {
 import { usePlayer } from "../context/PlayerContext";
 import Artwork from "../components/Artwork";
 import { fetchLyrics } from "../services/lyrics";
+import { getTrackAlbumLink } from "../services/jellyfin";
 
 // Collapsible right-side panel with a now-playing preview, lyrics for the
 // current track (when LRCLIB has any) and the queue. The wrapper animates its
@@ -16,6 +18,7 @@ import { fetchLyrics } from "../services/lyrics";
 // and it is fully closable from its own X and Escape, or via the queue toggle
 // in the bottom player bar.
 function QueuePanel({ isOpen, onClose }) {
+	const navigate = useNavigate();
 	const {
 		currentTrack,
 		currentTime,
@@ -151,10 +154,21 @@ function QueuePanel({ isOpen, onClose }) {
 									/>
 								</div>
 								<div>
-									<p className="truncate text-sm font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+									<p
+										onClick={() => currentTrack?.id && navigate(`/tracks/${currentTrack.id}`, { state: { track: currentTrack } })}
+										title="View track details"
+										className="truncate text-sm font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+									>
 										{currentTrack.title}
 									</p>
-									<p className="truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+									<p
+										onClick={() => {
+											const albumLink = getTrackAlbumLink(currentTrack);
+											if (albumLink) navigate(`/albums/${albumLink.id}`, { state: { title: currentTrack.album } });
+										}}
+										title="View album"
+										className="truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+									>
 										{currentTrack.artist}
 									</p>
 								</div>

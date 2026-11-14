@@ -8,10 +8,16 @@ let databasePromise;
 async function getDatabase() {
 	if (!isTauri()) return null;
 	if (!databasePromise) {
-		databasePromise = Database.load(DATABASE_URL).catch((error) => {
-			databasePromise = undefined;
-			throw error;
-		});
+		databasePromise = Database.load(DATABASE_URL)
+			.then((database) => {
+				// Keep the cache healthy without any manual maintenance: once per app session, trim size and vacuum freed pages.
+				maintainJellyfinCache().catch(() => {});
+				return database;
+			})
+			.catch((error) => {
+				databasePromise = undefined;
+				throw error;
+			});
 	}
 	return databasePromise;
 }
@@ -28,6 +34,26 @@ async function readEntry(key) {
 
 	const data = JSON.parse(rows[0].data);
 	return data;
+}
+
+// Jellyfin DTOs carry several heavyweight fields the app never reads
+// (MediaSources/MediaStreams dominate, often >80% of each item). Stripping
+// them at cache-write time keeps the database small without changing
+// anything the offline fallback paths consume.
+const CACHE_TRIMMED_FIELDS = new Set(["MediaSources", "MediaStreams"]);
+
+function trimForCache(value, depth = 0) {
+	if (!value || typeof value !== "object") return value;
+	if (depth > 5) return value;
+	if (Array.isArray(value)) {
+		return value.map((item) => trimForCache(item, depth + 1));
+	}
+	const trimmed = {};
+	for (const [field, fieldValue] of Object.entries(value)) {
+		if (CACHE_TRIMMED_FIELDS.has(field)) continue;
+		trimmed[field] = trimForCache(fieldValue, depth + 1);
+	}
+	return trimmed;
 }
 
 export async function getCachedJellyfinItems(serverUrl, userId) {
@@ -94,15 +120,62 @@ export async function markJellyfinLibrarySynced(serverUrl, userId) {
 	);
 }
 
+// The response cache is kept bounded so it can never grow unbounded:
+// when the entry count or total size exceeds the caps, the oldest
+// entries (by fetched_at) are evicted and the database is vacuumed to
+// return the freed pages to the OS. Runs automatically at app start and
+// after every library sync.
+const MAX_CACHE_ENTRIES = 500;
+const MAX_CACHE_BYTES = 16 * 1024 * 1024;
+
+export async function maintainJellyfinCache() {
+	const database = await getDatabase();
+	if (!database) return { evictedEntries: 0 };
+
+	const rows = await database.select(
+		"SELECT cache_key, LENGTH(data) AS size FROM jellyfin_responses ORDER BY COALESCE(fetched_at, '') ASC, cache_key ASC",
+	);
+	let remaining = rows.length;
+	let totalBytes = rows.reduce((sum, row) => sum + (row.size || 0), 0);
+	if (remaining <= MAX_CACHE_ENTRIES && totalBytes <= MAX_CACHE_BYTES) {
+		return { evictedEntries: 0 };
+	}
+
+	const staleKeys = [];
+	for (const row of rows) {
+		if (remaining <= MAX_CACHE_ENTRIES && totalBytes <= MAX_CACHE_BYTES) break;
+		staleKeys.push(row.cache_key);
+		remaining -= 1;
+		totalBytes -= row.size || 0;
+	}
+
+	const chunkSize = 40;
+	for (let index = 0; index < staleKeys.length; index += chunkSize) {
+		const chunk = staleKeys.slice(index, index + chunkSize);
+		const placeholders = chunk.map((_, offset) => `$${offset + 1}`).join(", ");
+		await database.execute(
+			`DELETE FROM jellyfin_responses WHERE cache_key IN (${placeholders})`,
+			chunk,
+		);
+	}
+	try {
+		await database.execute("VACUUM");
+	} catch {
+		// Vacuum can fail if a query is mid-flight; the freed pages are
+		// simply reclaimed on a later maintenance run.
+	}
+	return { evictedEntries: staleKeys.length };
+}
+
 async function writeEntry(key, data) {
 	const database = await getDatabase();
 	if (!database) return;
 
 	await database.execute(
-		`INSERT INTO jellyfin_responses (cache_key, data)
-		 VALUES ($1, $2)
-		 ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data`,
-		[key, JSON.stringify(data)],
+		`INSERT INTO jellyfin_responses (cache_key, data, fetched_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
+		[key, JSON.stringify(trimForCache(data)), new Date().toISOString()],
 	);
 	if (syncKeyCapture) syncKeyCapture.add(key);
 }
@@ -151,6 +224,7 @@ export async function finishJellyfinSyncCapture(serverUrl) {
 			chunk,
 		);
 	}
+	await maintainJellyfinCache();
 	return { removedStaleEntries: staleKeys.length };
 }
 

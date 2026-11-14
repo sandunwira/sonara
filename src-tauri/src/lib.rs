@@ -68,6 +68,12 @@ pub fn run() {
             );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "add_fetched_at_to_response_cache",
+            sql: "ALTER TABLE jellyfin_responses ADD COLUMN fetched_at TEXT;",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
