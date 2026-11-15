@@ -162,15 +162,10 @@ function QueuePanel({ isOpen, onClose }) {
 										{currentTrack.title}
 									</p>
 									<p
-										// onClick={() => {
-										// 	const albumLink = getTrackAlbumLink(currentTrack);
-										// 	if (albumLink) navigate(`/albums/${albumLink.id}`, { state: { title: currentTrack.album } });
-										// }}
 										onClick={() => {
 											const artistLink = getTrackArtistLink(currentTrack);
 											if (artistLink) navigate(`/artists/${artistLink.id}`, { state: { name: currentTrack.artist } });
 										}}
-										// title="View album"
 										title="View artist"
 										className="truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
 									>
