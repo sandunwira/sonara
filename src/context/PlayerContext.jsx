@@ -58,6 +58,11 @@ export function PlayerProvider({ children }) {
 	const queueRef = useRef(queue);
 	const queueIndexRef = useRef(queueIndex);
 	const isRepeatRef = useRef(repeatMode);
+	// Mirrors isShuffle for callbacks that must not wait for a re-render
+	// (e.g. track-end advancing), and remembers the queue order from before
+	// shuffle was enabled so it can be restored when shuffle is turned off.
+	const isShuffleRef = useRef(isShuffle);
+	const originalQueueOrderRef = useRef(null);
 	const audioRef = useRef(null);
 	const reportedTrackIdRef = useRef(null);
 	const activePlaybackTrackRef = useRef(null);
@@ -70,6 +75,24 @@ export function PlayerProvider({ children }) {
 	queueRef.current = queue;
 	queueIndexRef.current = queueIndex;
 	isRepeatRef.current = repeatMode;
+	isShuffleRef.current = isShuffle;
+
+	// Fisher–Yates shuffle returning a new array.
+	const shuffleArray = (array) => {
+		const result = [...array];
+		for (let index = result.length - 1; index > 0; index -= 1) {
+			const swapIndex = Math.floor(Math.random() * (index + 1));
+			[result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+		}
+		return result;
+	};
+
+	// Shuffles everything after the given position (the un-played part of the
+	// queue), keeping the played history and the current track in place.
+	const shuffleQueueAfter = (list, index) => {
+		if (index < 0 || index >= list.length - 1) return list;
+		return [...list.slice(0, index + 1), ...shuffleArray(list.slice(index + 1))];
+	};
 	playbackReporterRef.current = { reportTrackPlayed, reportPlaybackEvent };
 
 	const updateQueue = (nextQueue, nextIndex) => {
@@ -380,7 +403,12 @@ export function PlayerProvider({ children }) {
 			nextQueue.unshift(track);
 			nextIndex = 0;
 		}
-		updateQueue(nextQueue, nextIndex);
+		// While shuffle is on, a newly loaded queue is shuffled from the
+		// starting track onward so the upcoming tracks play in random order.
+		const finalQueue = isShuffleRef.current ? shuffleQueueAfter(nextQueue, nextIndex) : nextQueue;
+		// A brand-new queue invalidates any previous shuffle snapshot.
+		originalQueueOrderRef.current = null;
+		updateQueue(finalQueue, nextIndex);
 		startTrack(track);
 	};
 
@@ -555,17 +583,21 @@ export function PlayerProvider({ children }) {
 		if (queueIndexRef.current >= currentQueue.length - 1) {
 			// End of the queue: stop unless repeating the whole queue.
 			if (!wrap) return;
+			if (isShuffleRef.current && currentQueue.length > 1) {
+				// Loop with a fresh shuffle each pass: keep the first track
+				// (the next one up) in place and reshuffle the rest.
+				const reshuffled = [currentQueue[0], ...shuffleArray(currentQueue.slice(1))];
+				updateQueue(reshuffled, 0);
+				startTrack(reshuffled[0]);
+				return;
+			}
 			updateQueue(currentQueue, 0);
 			startTrack(currentQueue[0]);
 			return;
 		}
-		let nextIdx;
-		if (isShuffle) {
-			nextIdx = Math.floor(Math.random() * (currentQueue.length - queueIndexRef.current - 1))
-				+ queueIndexRef.current + 1;
-		} else {
-			nextIdx = queueIndexRef.current + 1;
-		}
+		// The queue tail is already shuffled while shuffle is on, so the next
+		// track is simply the one after the current position.
+		const nextIdx = queueIndexRef.current + 1;
 		updateQueue(currentQueue, nextIdx);
 		startTrack(currentQueue[nextIdx]);
 	};
@@ -743,7 +775,42 @@ export function PlayerProvider({ children }) {
 		});
 	}, [currentTrack, isPlaying]);
 
-	const toggleShuffle = () => setIsShuffle((prev) => !prev);
+	// Toggling shuffle reorders the queue itself instead of letting track-end
+	// randomly pick the next track. The whole queue is shuffled — already
+	// played tracks included — with the current track kept playing and placed
+	// first, so every track comes up again in random order. Turning shuffle
+	// off restores the order the queue had when shuffle was enabled.
+	const toggleShuffle = () => {
+		const enabling = !isShuffle;
+		setIsShuffle(enabling);
+		isShuffleRef.current = enabling;
+
+		const currentQueue = queueRef.current;
+		const index = queueIndexRef.current;
+		if (currentQueue.length < 2) return;
+
+		if (enabling) {
+			originalQueueOrderRef.current = currentQueue;
+			if (index >= 0) {
+				// Something is playing: keep the current track in place and
+				// shuffle the entire rest of the queue after it.
+				updateQueue(
+					[currentQueue[index], ...shuffleArray(currentQueue.filter((_, i) => i !== index))],
+					0,
+				);
+			} else {
+				// Nothing is playing yet: shuffle the whole queue.
+				updateQueue(shuffleArray(currentQueue), -1);
+			}
+		} else if (originalQueueOrderRef.current) {
+			const restored = [...originalQueueOrderRef.current];
+			const currentId = currentTrackRef.current?.id;
+			originalQueueOrderRef.current = null;
+			updateQueue(restored, currentId
+				? restored.findIndex((track) => track.id === currentId)
+				: queueIndexRef.current);
+		}
+	};
 	// Cycles repeat: off → all (loop queue) → one (loop track) → off.
 	const toggleRepeat = () => setRepeatMode((mode) => (mode === "off" ? "all" : mode === "all" ? "one" : "off"));
 
