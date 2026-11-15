@@ -170,26 +170,12 @@ function QueuePanel({ isOpen, onClose }) {
 			{isOpen && (
 				<div className="flex h-full w-72 flex-col bg-[#0d0d10] text-zinc-200">
 					{/* Panel header */}
-					<header className="flex shrink-0 items-center justify-between border-b border-[#1b1b22] px-4 py-3">
-						<div>
-							<h2 className="text-sm font-semibold text-white">Queue</h2>
-							<p className="text-[11px] text-zinc-500">
-								{upcomingTracks.length} upcoming{" "}
-								{upcomingTracks.length === 1 ? "track" : "tracks"}
+					<header className="flex shrink-0 items-center justify-between px-4 py-3">
+						<h2 className="text-sm font-semibold text-white">Queue</h2>
+						<div className="flex items-center gap-2">
+							<p className="text-[10px] font-semibold text-zinc-400">
+								{queueIndex + 1}/{queue.length}
 							</p>
-						</div>
-						<div className="flex items-center gap-1">
-							<button
-								type="button"
-								onClick={clearQueue}
-								disabled={upcomingTracks.length === 0}
-								title="Clear upcoming tracks"
-								aria-label="Clear upcoming tracks"
-								className="flex items-center gap-1 rounded-xs px-2 py-1 text-[11px] text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-							>
-								<IconTrash size={13} />
-								Clear
-							</button>
 							<button
 								type="button"
 								onClick={onClose}
@@ -201,7 +187,7 @@ function QueuePanel({ isOpen, onClose }) {
 						</div>
 					</header>
 
-					<div className="flex-1 overflow-y-auto space-y-8 px-4 py-4">
+					<div className="flex-1 overflow-y-auto space-y-8 px-4 pb-4">
 						{/* Now playing preview */}
 						<div className="space-y-2">
 							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -254,9 +240,22 @@ function QueuePanel({ isOpen, onClose }) {
 
 						{/* Upcoming tracks */}
 						<div className="space-y-2">
-							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-								Up Next
-							</p>
+							<div className="flex items-center justify-between">
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+									Up Next
+								</p>
+								<button
+									type="button"
+									onClick={clearQueue}
+									disabled={upcomingTracks.length === 0}
+									title="Clear upcoming tracks"
+									aria-label="Clear upcoming tracks"
+									className="flex items-center gap-1 uppercase rounded-xs px-2 py-1 text-[10px] text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+								>
+									<IconTrash size={10} stroke={1.5} />
+									Clear
+								</button>
+							</div>
 							{upcomingTracks.length === 0 ? (
 								<p className="px-2 py-4 text-center text-xs text-zinc-500">
 									No tracks in the queue
