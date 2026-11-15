@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { IconChevronLeft, IconSearch, IconServer, IconDotsVertical } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
-import { fetchMusicCollection, fetchMusicItem, getTrackAlbumLink } from "../services/jellyfin";
+import { fetchMusicCollection, fetchMusicItem, getThumbnailUrl, getTrackAlbumLink } from "../services/jellyfin";
 import useGenrePlayback from "../hooks/useGenrePlayback";
 import GenrePlayButton from "../components/GenrePlayButton";
 import TrackPlayButton from "../components/TrackPlayButton";
@@ -13,6 +13,106 @@ function formatDuration(seconds) {
 	if (!seconds || !Number.isFinite(seconds)) return "";
 	return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
+
+// Track tables render incrementally: the first screenful is painted
+// immediately and another chunk is appended whenever the sentinel below the
+// list scrolls into view. Mounting all 3,000 rows at once was the main reason
+// opening the Tracks page felt slow; search/queue actions still use the full
+// (unrendered) item list.
+const INITIAL_TRACK_ROWS = 100;
+const TRACK_ROW_CHUNK = 250;
+
+// One row of the track table. Memoized so play/pause or a track change only
+// re-renders the affected row instead of every row in a 3,000-track library.
+// Actions arrive through a ref so their identity stays stable while always
+// pointing at the latest handlers. The "track-row" class also lets the
+// browser skip layout/paint for rows scrolled out of view.
+const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlaying, actionsRef }) {
+	const albumLink = getTrackAlbumLink(track);
+	return (
+		<div
+			role="button"
+			tabIndex={0}
+			onClick={() => actionsRef.current.play(track)}
+			onKeyDown={(event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					actionsRef.current.play(track);
+				}
+			}}
+			aria-label={`Play ${track.title || "track"}`}
+			className="track-row group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
+		>
+			<TrackPlayButton
+				index={index}
+				isCurrent={isCurrent}
+				isPlaying={isPlaying}
+				onPlay={() => actionsRef.current.play(track)}
+				onTogglePlay={() => actionsRef.current.togglePlay()}
+			/>
+			<span className="flex min-w-0 items-center gap-3">
+				<Artwork src={track.cover ? getThumbnailUrl(track.cover, 96) : track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
+				<span className="min-w-0">
+					<span
+						onClick={(event) => {
+							event.stopPropagation();
+							actionsRef.current.openTrack(track);
+						}}
+						title="View track details"
+						className={`block truncate text-xs font-semibold ${isCurrent ? "text-blue-500" : "text-white"} cursor-pointer hover:underline underline-offset-2 transition-all duration-200`}
+					>
+						{track.title}
+					</span>
+					{track.raw?.ArtistItems?.[0]?.Id ? (
+						<span
+							onClick={(event) => {
+								event.stopPropagation();
+								actionsRef.current.openArtist(track.raw.ArtistItems[0].Id, track.artist);
+							}}
+							title="View artist details"
+							className="block truncate text-[11px] font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+							{track.artist}
+						</span>
+					) : (
+						<span className="block truncate text-[11px] font-light text-zinc-400">
+							{track.artist}
+						</span>
+					)}
+				</span>
+			</span>
+			<span className="block">
+				{albumLink ? (
+					<span
+						onClick={(event) => {
+							event.stopPropagation();
+							actionsRef.current.openAlbum(albumLink.id, albumLink.title);
+						}}
+						title="View album"
+						className="block cursor-pointer truncate text-xs text-zinc-500 hover:text-white hover:underline underline-offset-2"
+					>
+						{track.album}
+					</span>
+				) : (
+					<span className="block truncate text-xs text-zinc-500">{track.album}</span>
+				)}
+			</span>
+			<span className="text-right text-[11px] text-zinc-500">{formatDuration(track.duration)}</span>
+			<span className="flex justify-end">
+				<button
+					type="button"
+					onClick={(event) => {
+						event.stopPropagation();
+						// Handle more actions for the track (e.g., show a dropdown menu)
+					}}
+					aria-label="More actions"
+					className="text-zinc-400 hover:text-white p-0.5 cursor-pointer transition"
+				>
+					<IconDotsVertical size={14} stroke={1.5} />
+				</button>
+			</span>
+		</div>
+	);
+});
 
 export default function LibraryCollectionPage({
 	title,
@@ -30,23 +130,34 @@ export default function LibraryCollectionPage({
 	const { session, isAuthenticated, openServerModal, libraryVersion } = useJellyfin();
 	const { playTrack, currentTrack, isPlaying: isPlayerPlaying, togglePlay: togglePlayerPlay } = usePlayer();
 	const { playGenre, pendingGenreIds, activeGenreId, currentGenreNames, isPlaying, togglePlay } = useGenrePlayback();
-	const [items, setItems] = useState([]);
+	// Loaded data is tagged with the collection it belongs to (server + detail
+	// route). When that key changes, the old items are not rendered at all:
+	// otherwise navigating from a folder/genre grid into its detail showed the
+	// previous grid entities through the track-list branch for one frame before
+	// the effect cleared them.
+	const collectionKey = `${session?.serverUrl || ""}|${session?.userId || ""}|${detailId || ""}`;
+	const [loadedCollection, setLoadedCollection] = useState({ key: null, items: [] });
+	const [errorState, setErrorState] = useState({ key: null, message: "" });
 	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState("");
 	const [search, setSearch] = useState("");
 	const [detailTitle, setDetailTitle] = useState(location.state?.title || "");
 
+	const isSelectionPending = loadedCollection.key !== collectionKey;
+	const items = isSelectionPending ? [] : loadedCollection.items;
+	const error = errorState.key === collectionKey ? errorState.message : "";
+
 	useEffect(() => {
 		if (!isAuthenticated || !session) {
-			setItems([]);
+			setLoadedCollection({ key: null, items: [] });
 			return undefined;
 		}
 
+		const requestKey = collectionKey;
 		let cancelled = false;
 		setDetailTitle(location.state?.title || "");
 		const load = async () => {
 			setIsLoading(true);
-			setError("");
+			setErrorState({ key: requestKey, message: "" });
 			try {
 				let data;
 				if (detailId) {
@@ -68,13 +179,17 @@ export default function LibraryCollectionPage({
 				} else {
 					data = await loadItems(session);
 				}
-				if (!cancelled) setItems(data);
+				if (!cancelled) setLoadedCollection({ key: requestKey, items: data });
 			} catch (loadError) {
 				console.error(`Failed to load ${title.toLowerCase()}:`, loadError);
 				if (!cancelled) {
-					setError(navigator.onLine
-						? `Could not load ${title.toLowerCase()}. Please try again.`
-						: "You are offline and this section was not cached. Connect to the server and sync your library.");
+					setLoadedCollection({ key: requestKey, items: [] });
+					setErrorState({
+						key: requestKey,
+						message: navigator.onLine
+							? `Could not load ${title.toLowerCase()}. Please try again.`
+							: "You are offline and this section was not cached. Connect to the server and sync your library.",
+					});
 				}
 			} finally {
 				if (!cancelled) setIsLoading(false);
@@ -85,7 +200,7 @@ export default function LibraryCollectionPage({
 		return () => {
 			cancelled = true;
 		};
-	}, [detailFilter, detailId, isAuthenticated, isFolderList, libraryVersion, loadItems, location.state?.title, session, title]);
+	}, [collectionKey, detailFilter, detailId, isAuthenticated, isFolderList, libraryVersion, loadItems, location.state?.title, session, title]);
 
 	const visibleItems = useMemo(() => {
 		const query = search.trim().toLowerCase();
@@ -96,10 +211,48 @@ export default function LibraryCollectionPage({
 		);
 	}, [items, search]);
 
+	// Incremental row rendering for long track tables (see constants above).
+	const [renderedCount, setRenderedCount] = useState(INITIAL_TRACK_ROWS);
+	const loadMoreRef = useRef(null);
+	const renderedItems = useMemo(
+		() => visibleItems.slice(0, renderedCount),
+		[visibleItems, renderedCount],
+	);
+
+	useEffect(() => {
+		setRenderedCount(INITIAL_TRACK_ROWS);
+	}, [items, search]);
+
+	useEffect(() => {
+		if (renderedCount >= visibleItems.length) return undefined;
+		const node = loadMoreRef.current;
+		if (!node) return undefined;
+		// Scroll container is the layout's <main>; observing against it keeps
+		// the trigger accurate wherever this table is used.
+		const root = node.closest("main");
+		const observer = new IntersectionObserver((entries) => {
+			if (entries.some((entry) => entry.isIntersecting)) {
+				setRenderedCount((count) => Math.min(count + TRACK_ROW_CHUNK, visibleItems.length));
+			}
+		}, { root, rootMargin: "600px 0px" });
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [renderedCount, visibleItems.length]);
+
 	const pageTitle = detailId ? detailTitle || title.slice(0, -1) : title;
 	const playFromList = (track) => {
 		const index = visibleItems.findIndex((item) => item.id === track.id);
 		playTrack(track, index < 0 ? [track] : visibleItems.slice(index));
+	};
+	// Stable container for row handlers; refreshed every render so memoized
+	// rows always invoke the latest closures without re-rendering themselves.
+	const trackActionsRef = useRef(null);
+	trackActionsRef.current = {
+		play: playFromList,
+		togglePlay: togglePlayerPlay,
+		openTrack: (track) => navigate(`/tracks/${track.id}`, { state: { track } }),
+		openAlbum: (albumId, title) => navigate(`/albums/${albumId}`, { state: { title } }),
+		openArtist: (artistId, title) => navigate(`/artists/${artistId}`, { state: { title } }),
 	};
 
 	return (
@@ -121,7 +274,7 @@ export default function LibraryCollectionPage({
 							<Icon size={19} stroke={1.7} />
 							<h1 className="text-xl font-bold tracking-tight text-white">{pageTitle}</h1>
 						</div>
-						{!isLoading && !error && (
+						{!isLoading && !isSelectionPending && !error && (
 							<span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
 								{visibleItems.length}
 							</span>
@@ -160,7 +313,7 @@ export default function LibraryCollectionPage({
 						Connect Server
 					</button>
 				</div>
-			) : isLoading ? (
+			) : isLoading || isSelectionPending ? (
 				<div className="py-16 text-center text-xs text-zinc-500">Loading library…</div>
 			) : error ? (
 				<div className="py-16 text-center text-xs text-red-400">{error}</div>
@@ -238,11 +391,11 @@ export default function LibraryCollectionPage({
 							>
 								<div className={`relative aspect-square rounded-xs border border-[#22222a] bg-[#141419] brightness-90 grayscale-60 group-hover:grayscale-0 group-hover:brightness-100 group-focus:outline-none group-focus-visible:brightness-100 transition-all duration-200 ${isFolderList && !item.cover ? "flex items-center justify-center" : ""}`}>
 									{isFolderList && item.cover ? (
-										<Artwork src={item.cover} alt={item.title || item.name} className="h-full w-full object-cover cursor-pointer" />
+										<Artwork src={getThumbnailUrl(item.cover, 200)} alt={item.title || item.name} className="h-full w-full object-cover cursor-pointer" />
 									) : isFolderList ? (
 										<Icon size={48} stroke={1.2} className="text-zinc-300 group-hover:text-white transition-all duration-200 cursor-pointer" />
 									) : (
-										<Artwork src={item.cover} alt="" className="h-full w-full object-cover cursor-pointer" />
+										<Artwork src={item.cover ? getThumbnailUrl(item.cover, 200) : item.cover} alt="" className="h-full w-full object-cover cursor-pointer" />
 									)}
 								</div>
 								<div className="mt-2 flex flex-row items-center justify-between">
@@ -268,102 +421,33 @@ export default function LibraryCollectionPage({
 					</div>
 				)
 			) : (
-				<div className="overflow-hidden rounded-xs border border-[#22222a] bg-[#101014]">
-					<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 border-b border-[#22222a] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]">
-						<span className="block text-center">#</span>
-						<span>Title</span>
-						<span className="block">Album</span>
-						<span className="text-right">Time</span>
-						<span></span>
-					</div>
-					{visibleItems.map((track, index) => {
-						const albumLink = getTrackAlbumLink(track);
-						return (
-							<div
-								key={track.id}
-								role="button"
-								tabIndex={0}
-								onClick={() => playFromList(track)}
-								onKeyDown={(event) => {
-									if (event.key === "Enter" || event.key === " ") {
-										event.preventDefault();
-										playFromList(track);
-									}
-								}}
-								aria-label={`Play ${track.title || "track"}`}
-								className="group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
-							>
-								<TrackPlayButton
+				<>
+					<div className="overflow-hidden rounded-xs border border-[#22222a] bg-[#101014]">
+						<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 border-b border-[#22222a] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]">
+							<span className="block text-center">#</span>
+							<span>Title</span>
+							<span className="block">Album</span>
+							<span className="text-right">Time</span>
+							<span></span>
+						</div>
+						{renderedItems.map((track, index) => {
+							const isCurrent = currentTrack?.id === track.id;
+							return (
+								<TrackRow
+									key={track.id}
+									track={track}
 									index={index}
-									isCurrent={currentTrack?.id === track.id}
-									isPlaying={isPlayerPlaying}
-									onPlay={() => playFromList(track)}
-									onTogglePlay={togglePlayerPlay}
+									isCurrent={isCurrent}
+									isPlaying={isCurrent ? isPlayerPlaying : false}
+									actionsRef={trackActionsRef}
 								/>
-								<span className="flex min-w-0 items-center gap-3">
-									<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
-									<span className="min-w-0">
-										<span
-											onClick={(event) => {
-												event.stopPropagation();
-												navigate(`/tracks/${track.id}`, { state: { track } });
-											}}
-											title="View track details"
-											className={`block truncate text-xs font-semibold ${currentTrack?.id === track.id ? "text-blue-500" : "text-white"} cursor-pointer hover:underline underline-offset-2 transition-all duration-200`}
-										>
-											{track.title}
-										</span>
-										{track.raw?.ArtistItems?.[0]?.Id ? (
-											<span
-												onClick={(event) => {
-													event.stopPropagation();
-													navigate(`/artists/${track.raw.ArtistItems[0].Id}`, { state: { title: track.artist } });
-												}}
-												title="View artist details"
-												className="block truncate text-[11px] font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
-												{track.artist}
-											</span>
-										) : (
-											<span className="block truncate text-[11px] font-light text-zinc-400">
-												{track.artist}
-											</span>
-										)}
-									</span>
-								</span>
-								<span className="block">
-									{albumLink ? (
-										<span
-											onClick={(event) => {
-												event.stopPropagation();
-												navigate(`/albums/${albumLink.id}`, { state: { title: albumLink.title } });
-											}}
-											title="View album"
-											className="block cursor-pointer truncate text-xs text-zinc-500 hover:text-white hover:underline underline-offset-2"
-										>
-											{track.album}
-										</span>
-									) : (
-										<span className="block truncate text-xs text-zinc-500">{track.album}</span>
-									)}
-								</span>
-								<span className="text-right text-[11px] text-zinc-500">{formatDuration(track.duration)}</span>
-								<span className="flex justify-end">
-									<button
-										type="button"
-										onClick={(event) => {
-											event.stopPropagation();
-											// Handle more actions for the track (e.g., show a dropdown menu)
-										}}
-										aria-label="More actions"
-										className="text-zinc-400 hover:text-white p-0.5 cursor-pointer transition"
-									>
-										<IconDotsVertical size={14} stroke={1.5} />
-									</button>
-								</span>
-							</div>
-						);
-					})}
-				</div>
+							);
+						})}
+					</div>
+					{renderedCount < visibleItems.length && (
+						<div ref={loadMoreRef} className="h-px w-full" aria-hidden="true" />
+					)}
+				</>
 			)}
 		</div>
 	);

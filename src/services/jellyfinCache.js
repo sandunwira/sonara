@@ -10,8 +10,12 @@ async function getDatabase() {
 	if (!databasePromise) {
 		databasePromise = Database.load(DATABASE_URL)
 			.then((database) => {
-				// Keep the cache healthy without any manual maintenance: once per app session, trim size and vacuum freed pages.
-				maintainJellyfinCache().catch(() => {});
+				// Keep the cache healthy without any manual maintenance: once per
+				// app session, trim size and vacuum freed pages. Deferred so the
+				// startup scan does not compete with session/queue/bootstrap reads.
+				setTimeout(() => {
+					maintainJellyfinCache().catch(() => {});
+				}, 5000);
 				return database;
 			})
 			.catch((error) => {
@@ -56,37 +60,90 @@ function trimForCache(value, depth = 0) {
 	return trimmed;
 }
 
+// Parsed snapshots are memoized per server/user: offline fallbacks call this
+// several times per page load (tracks, artists, libraries, genres), and
+// re-reading + re-parsing every cached response each time is expensive.
+const cachedItemsMemo = new Map();
+
+function invalidateCachedJellyfinItems() {
+	cachedItemsMemo.clear();
+}
+
 export async function getCachedJellyfinItems(serverUrl, userId) {
 	const database = await getDatabase();
 	if (!database) return [];
 
-	const rows = await database.select("SELECT cache_key, data FROM jellyfin_responses");
-	const server = new URL(serverUrl);
-	const serverPath = server.pathname.replace(/\/+$/, "");
-	const itemsById = new Map();
-	for (const row of rows) {
-		const request = new URL(row.cache_key);
-		const isForServerPath = !serverPath
-			|| request.pathname === serverPath
-			|| request.pathname.startsWith(`${serverPath}/`);
-		const isForUser = request.searchParams.get("userId") === userId
-			|| request.pathname.startsWith(`${serverPath}/Users/${userId}/`);
-		if (request.origin !== server.origin || !isForServerPath || !isForUser) continue;
+	const memoKey = `${serverUrl}::${userId}`;
+	const memoized = cachedItemsMemo.get(memoKey);
+	if (memoized) return memoized;
 
-		const payload = JSON.parse(row.data);
-		for (const item of payload.Items || []) {
-			if (!item?.Id) continue;
-			const previous = itemsById.get(item.Id);
-			if (!previous || JSON.stringify(item).length > JSON.stringify(previous).length) {
-				itemsById.set(item.Id, item);
+	const load = (async () => {
+		const rows = await database.select("SELECT cache_key, data FROM jellyfin_responses");
+		const server = new URL(serverUrl);
+		const serverPath = server.pathname.replace(/\/+$/, "");
+		const itemsById = new Map();
+		for (const row of rows) {
+			const request = new URL(row.cache_key);
+			const isForServerPath = !serverPath
+				|| request.pathname === serverPath
+				|| request.pathname.startsWith(`${serverPath}/`);
+			const isForUser = request.searchParams.get("userId") === userId
+				|| request.pathname.startsWith(`${serverPath}/Users/${userId}/`);
+			if (request.origin !== server.origin || !isForServerPath || !isForUser) continue;
+
+			const payload = JSON.parse(row.data);
+			for (const item of payload.Items || []) {
+				if (!item?.Id) continue;
+				const previous = itemsById.get(item.Id);
+				// Cache entries written from different endpoints carry different
+				// field sets; keep the widest copy. Comparing key counts is far
+				// cheaper than serializing both items just to compare lengths.
+				if (!previous || Object.keys(item).length > Object.keys(previous).length) {
+					itemsById.set(item.Id, item);
+				}
 			}
 		}
-	}
-	return [...itemsById.values()];
+		return [...itemsById.values()];
+	})();
+
+	cachedItemsMemo.set(memoKey, load);
+	load.catch(() => {
+		if (cachedItemsMemo.get(memoKey) === load) cachedItemsMemo.delete(memoKey);
+	});
+	return load;
 }
 
 export async function readJellyfinCacheEntry(key) {
 	return readEntry(key);
+}
+
+// Bulk cache read used by paginated endpoints: resolves every cached page in
+// one indexed IN(...) query per chunk instead of one round-trip per page.
+// Returns a Map of cache key -> parsed payload for the keys that exist.
+export async function readCachedJellyfinEntries(keys) {
+	const result = new Map();
+	if (!Array.isArray(keys) || keys.length === 0) return result;
+	const database = await getDatabase();
+	if (!database) return result;
+
+	// SQLite caps bound parameters (999 by default), so read in safe chunks.
+	const chunkSize = 200;
+	for (let index = 0; index < keys.length; index += chunkSize) {
+		const chunk = keys.slice(index, index + chunkSize);
+		const placeholders = chunk.map((_, offset) => `$${offset + 1}`).join(", ");
+		const rows = await database.select(
+			`SELECT cache_key, data FROM jellyfin_responses WHERE cache_key IN (${placeholders})`,
+			chunk,
+		);
+		for (const row of rows) {
+			try {
+				result.set(row.cache_key, JSON.parse(row.data));
+			} catch {
+				// Corrupt entries are treated as cache misses.
+			}
+		}
+	}
+	return result;
 }
 
 const SYNC_MARKER_PREFIX = "jellyfin_sync:";
@@ -164,6 +221,7 @@ export async function maintainJellyfinCache() {
 		// Vacuum can fail if a query is mid-flight; the freed pages are
 		// simply reclaimed on a later maintenance run.
 	}
+	invalidateCachedJellyfinItems();
 	return { evictedEntries: staleKeys.length };
 }
 
@@ -177,6 +235,7 @@ async function writeEntry(key, data) {
 		 ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
 		[key, JSON.stringify(trimForCache(data)), new Date().toISOString()],
 	);
+	invalidateCachedJellyfinItems();
 	if (syncKeyCapture) syncKeyCapture.add(key);
 }
 
@@ -225,22 +284,16 @@ export async function finishJellyfinSyncCapture(serverUrl) {
 		);
 	}
 	await maintainJellyfinCache();
+	invalidateCachedJellyfinItems();
 	return { removedStaleEntries: staleKeys.length };
 }
 
-export async function fetchCachedJellyfinJson(url, headers, { forceRefresh = false } = {}) {
-	const key = url;
-	const database = await getDatabase();
-	if (database && !forceRefresh) {
-		const cachedData = await readEntry(key);
-		if (cachedData !== undefined) {
-			return new Response(JSON.stringify(cachedData), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			});
-		}
-	}
+// Identical requests issued while another is still in flight (for example
+// the connect flow and the auth effect both loading the library, or a page
+// and a sync hitting the same endpoint) share one network response.
+const inFlightRequests = new Map();
 
+async function requestJellyfinJson(url, headers, database) {
 	let response;
 	try {
 		response = await fetch(url, {
@@ -256,17 +309,50 @@ export async function fetchCachedJellyfinJson(url, headers, { forceRefresh = fal
 		throw error;
 	}
 
-	if (database && response.ok) {
-		const data = await response.clone().json();
-		await writeEntry(key, data);
-	} else if (!response.ok) {
-		await recordAppLog("error", "jellyfin-http", "Jellyfin returned an error response", {
-			path: new URL(url).pathname,
-			status: response.status,
-		});
+	if (response.ok) {
+		const data = await response.json();
+		if (database) await writeEntry(url, data);
+		return { ok: true, status: response.status, statusText: response.statusText, data };
 	}
 
-	return response;
+	await recordAppLog("error", "jellyfin-http", "Jellyfin returned an error response", {
+		path: new URL(url).pathname,
+		status: response.status,
+	});
+	return { ok: false, status: response.status, statusText: response.statusText, data: null };
+}
+
+export async function fetchCachedJellyfinJson(url, headers, { forceRefresh = false } = {}) {
+	const key = url;
+	const database = await getDatabase();
+	if (database && !forceRefresh) {
+		const cachedData = await readEntry(key);
+		if (cachedData !== undefined) {
+			// Callers only use .ok, .status and .json(); a real Response would
+			// stringify the payload again just so it can be parsed straight back.
+			return {
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				json: async () => cachedData,
+			};
+		}
+	}
+
+	let pending = inFlightRequests.get(key);
+	if (!pending) {
+		pending = requestJellyfinJson(url, headers, database).finally(() => {
+			inFlightRequests.delete(key);
+		});
+		inFlightRequests.set(key, pending);
+	}
+	const result = await pending;
+	return {
+		ok: result.ok,
+		status: result.status,
+		statusText: result.statusText,
+		json: async () => result.data,
+	};
 }
 
 export async function getStoredJellyfinServers() {
@@ -372,6 +458,7 @@ export async function updateStoredJellyfinServer(oldServerUrl, updatedServer) {
 		);
 	}
 
+	invalidateCachedJellyfinItems();
 	return { addressChanged: true, migratedCacheEntries };
 }
 
@@ -408,6 +495,7 @@ export async function purgeJellyfinServerCache(serverUrl) {
 		await database.execute("DELETE FROM app_state WHERE state_key = $1", [row.state_key]);
 	}
 
+	invalidateCachedJellyfinItems();
 	return { removedCacheEntries: doomedKeys.length };
 }
 
@@ -536,18 +624,52 @@ export async function removeStoredJellyfinSession() {
 	await database.execute("DELETE FROM jellyfin_session WHERE id = 1");
 }
 
+// Queue persistence is split so the (potentially 1000-track) queue array is
+// only rewritten when the queue itself changes, while the tiny playback
+// pointer row updates on every track change.
 export async function getStoredPlayerQueue() {
 	const database = await getDatabase();
 	if (!database) return null;
 
 	const rows = await database.select(
+		"SELECT state_key, data FROM app_state WHERE state_key IN ($1, $2)",
+		["player_queue_state", "player_queue_tracks"],
+	);
+	const byKey = new Map(rows.map((row) => [row.state_key, row.data]));
+
+	const stateRow = byKey.get("player_queue_state");
+	if (stateRow !== undefined) {
+		try {
+			const state = JSON.parse(stateRow);
+			const tracksRow = byKey.get("player_queue_tracks");
+			const tracks = tracksRow === undefined ? [] : JSON.parse(tracksRow);
+			if (tracksRow !== undefined) {
+				// One-time cleanup of the duplicate pre-split row.
+				database.execute(
+					"DELETE FROM app_state WHERE state_key = $1",
+					["player_queue"],
+				).catch(() => {});
+			}
+			return { ...state, queue: Array.isArray(tracks) ? tracks : [] };
+		} catch {
+			return null;
+		}
+	}
+
+	// Legacy single-row format written by earlier versions.
+	const legacyRow = await database.select(
 		"SELECT data FROM app_state WHERE state_key = $1",
 		["player_queue"],
 	);
-	return rows.length > 0 ? JSON.parse(rows[0].data) : null;
+	if (legacyRow.length === 0) return null;
+	try {
+		return JSON.parse(legacyRow[0].data);
+	} catch {
+		return null;
+	}
 }
 
-export async function saveStoredPlayerQueue(queueState) {
+export async function saveStoredPlayerQueueTracks(tracks) {
 	const database = await getDatabase();
 	if (!database) return false;
 
@@ -555,7 +677,20 @@ export async function saveStoredPlayerQueue(queueState) {
 		`INSERT INTO app_state (state_key, data)
 		 VALUES ($1, $2)
 		 ON CONFLICT(state_key) DO UPDATE SET data = excluded.data`,
-		["player_queue", JSON.stringify(queueState)],
+		["player_queue_tracks", JSON.stringify(tracks)],
+	);
+	return true;
+}
+
+export async function saveStoredPlayerQueueState(queueState) {
+	const database = await getDatabase();
+	if (!database) return false;
+
+	await database.execute(
+		`INSERT INTO app_state (state_key, data)
+		 VALUES ($1, $2)
+		 ON CONFLICT(state_key) DO UPDATE SET data = excluded.data`,
+		["player_queue_state", JSON.stringify(queueState)],
 	);
 	return true;
 }

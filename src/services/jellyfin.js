@@ -2,6 +2,7 @@ import {
 	fetchCachedJellyfinJson,
 	getCachedJellyfinItems,
 	readJellyfinCacheEntry,
+	readCachedJellyfinEntries,
 	isJellyfinLibrarySynced,
 	markJellyfinLibrarySynced,
 	startJellyfinSyncCapture,
@@ -100,9 +101,26 @@ export function getImageUrl(serverUrl, itemId, token, albumId = null) {
 	return `${base}/Items/${targetId}/Images/Primary?maxHeight=400&maxWidth=400&quality=90&api_key=${token}`;
 }
 
+// Rewrites an existing Jellyfin image url to request a smaller variant for
+// thumbnails (row artwork renders at 36-48px, grid tiles at ~200px), cutting
+// image transfer and decode cost. Non-Jellyfin urls (data: urls, wave
+// thumbnails) pass through untouched.
+export function getThumbnailUrl(coverUrl, size = 96) {
+	if (!coverUrl || !coverUrl.includes("/Images/Primary")) return coverUrl;
+	try {
+		const url = new URL(coverUrl);
+		url.searchParams.set("maxWidth", String(size));
+		url.searchParams.set("maxHeight", String(size));
+		url.searchParams.set("quality", "85");
+		return url.toString();
+	} catch {
+		return coverUrl;
+	}
+}
+
 export async function fetchUserMusic(serverUrl, userId, token, limit = 50, options = {}) {
 	const base = cleanUrl(serverUrl);
-	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&SortBy=PlayCount,DateCreated&SortOrder=Descending&Limit=${limit}&Fields=MediaSources,MediaStreams,PrimaryImageAspectRatio,Genres,AlbumId,Artists`;
+	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&SortBy=PlayCount,DateCreated&SortOrder=Descending&Limit=${limit}&Fields=PrimaryImageAspectRatio,Genres,AlbumId,Artists`;
 	const res = await fetchCachedJellyfinJson(url, getAuthHeaders(token), options);
 
 	if (!res.ok) {
@@ -115,7 +133,7 @@ export async function fetchUserMusic(serverUrl, userId, token, limit = 50, optio
 
 export async function fetchRecentlyPlayed(serverUrl, userId, token, limit = 50, options = {}) {
 	const base = cleanUrl(serverUrl);
-	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&IsPlayed=true&SortBy=DatePlayed&SortOrder=Descending&Limit=${limit}&Fields=MediaSources,MediaStreams,PrimaryImageAspectRatio,Genres,AlbumId,Artists`;
+	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&IsPlayed=true&SortBy=DatePlayed&SortOrder=Descending&Limit=${limit}&Fields=PrimaryImageAspectRatio,Genres,AlbumId,Artists`;
 	const res = await fetchCachedJellyfinJson(url, getAuthHeaders(token), options);
 
 	if (!res.ok) {
@@ -140,80 +158,141 @@ forceRefresh = false,
 const base = cleanUrl(serverUrl);
 const items = [];
 const limit = 200;
-let startIndex = 0;
 let totalRecordCount = Infinity;
-// Cached fallback now also covers unfiltered fetches (albums, all tracks,
-// etc.) whenever the library has been synced at least once.
-const canUseSyncedData = !forceRefresh
-	&& await isJellyfinLibrarySynced(base, userId);
-
-while (startIndex < totalRecordCount) {
-		const params = new URLSearchParams({
-			userId,
-			Recursive: "true",
-			IncludeItemTypes: includeItemTypes.join(","),
-			SortBy: sortBy,
-			SortOrder: sortOrder,
-			StartIndex: String(startIndex),
-			Limit: String(limit),
-			Fields: "MediaSources,MediaStreams,PrimaryImageAspectRatio,Genres,GenreItems,AlbumId,ArtistItems,Artists,UserData,Path,DateCreated",
-		});
-		if (parentId) params.set("ParentId", parentId);
-		if (artistId) params.set("ArtistIds", artistId);
-		if (genreId) params.set("GenreIds", genreId);
-		if (isFavorite !== undefined) params.set("IsFavorite", String(isFavorite));
-
-		let res;
-		try {
-			res = await fetchCachedJellyfinJson(
-				`${base}/Users/${userId}/Items?${params}`,
-				getAuthHeaders(token),
-				{ forceRefresh },
-			);
-		} catch (error) {
-			if (!canUseSyncedData) throw error;
-
-			const cachedItems = await getCachedJellyfinItems(base, userId);
-			const libraries = parentId
-				? cachedItems.filter((item) => item.Id === parentId && item.Type === "CollectionFolder")
-				: [];
-			const libraryPath = libraries[0]?.Path?.replace(/[\\/]+$/, "").toLowerCase();
-			const filteredItems = cachedItems.filter((item) => {
-				if (!includeItemTypes.includes(item.Type)) return false;
-				if (parentId) {
-					const isAlbumTrack = item.AlbumId === parentId;
-					const isLibraryTrack = item.ParentId === parentId
-						|| (libraryPath && item.Path?.toLowerCase().startsWith(`${libraryPath}\\`));
-					if (!isAlbumTrack && !isLibraryTrack) return false;
-				}
-				if (artistId && !item.ArtistItems?.some((artist) => artist.Id === artistId)) return false;
-				if (genreId && !item.GenreItems?.some((genre) => genre.Id === genreId)) return false;
-				if (isFavorite !== undefined && Boolean(item.UserData?.IsFavorite) !== isFavorite) return false;
-				return true;
-			});
-			return filteredItems.map((item) => (
-				formatEntities
-					? formatJellyfinEntity(base, item, token)
-					: formatJellyfinTrack(base, item, token, userId)
-			));
-		}
-		if (!res.ok) {
-			throw new Error(`Failed to fetch music collection (${res.status})`);
-		}
-
-		const data = await res.json();
-		const pageItems = data.Items || [];
-		items.push(...pageItems);
-		if (pageItems.length < limit) break;
-		totalRecordCount = data.TotalRecordCount ?? Infinity;
-		startIndex += pageItems.length;
+// The offline fallback only applies when the library has been synced at
+// least once. That marker lookup is deferred until a request actually fails
+// instead of being awaited before every collection fetch.
+let syncedState;
+const canUseSyncedData = async () => {
+	if (syncedState === undefined) {
+		syncedState = !forceRefresh && await isJellyfinLibrarySynced(base, userId);
 	}
+	return syncedState;
+};
 
-	return items.map((item) => (
+const buildParams = (pageStartIndex) => {
+	const params = new URLSearchParams({
+		userId,
+		Recursive: "true",
+		IncludeItemTypes: includeItemTypes.join(","),
+		SortBy: sortBy,
+		SortOrder: sortOrder,
+		StartIndex: String(pageStartIndex),
+		Limit: String(limit),
+		Fields: "PrimaryImageAspectRatio,Genres,GenreItems,AlbumId,ArtistItems,Artists,UserData,Path,DateCreated",
+	});
+	if (parentId) params.set("ParentId", parentId);
+	if (artistId) params.set("ArtistIds", artistId);
+	if (genreId) params.set("GenreIds", genreId);
+	if (isFavorite !== undefined) params.set("IsFavorite", String(isFavorite));
+	return params;
+};
+
+const pageUrl = (pageStartIndex) => `${base}/Users/${userId}/Items?${buildParams(pageStartIndex)}`;
+
+// Offline fallback: filter the synced snapshot the same way the server
+// query would have.
+const offlineFallback = async () => {
+	const cachedItems = await getCachedJellyfinItems(base, userId);
+	const libraries = parentId
+		? cachedItems.filter((item) => item.Id === parentId && item.Type === "CollectionFolder")
+		: [];
+	const libraryPath = libraries[0]?.Path?.replace(/[\\/]+$/, "").toLowerCase();
+	const filteredItems = cachedItems.filter((item) => {
+		if (!includeItemTypes.includes(item.Type)) return false;
+		if (parentId) {
+			const isAlbumTrack = item.AlbumId === parentId;
+			const isLibraryTrack = item.ParentId === parentId
+				|| (libraryPath && item.Path?.toLowerCase().startsWith(`${libraryPath}\\`));
+			if (!isAlbumTrack && !isLibraryTrack) return false;
+		}
+		if (artistId && !item.ArtistItems?.some((artist) => artist.Id === artistId)) return false;
+		if (genreId && !item.GenreItems?.some((genre) => genre.Id === genreId)) return false;
+		if (isFavorite !== undefined && Boolean(item.UserData?.IsFavorite) !== isFavorite) return false;
+		return true;
+	});
+	return filteredItems.map((item) => (
 		formatEntities
 			? formatJellyfinEntity(base, item, token)
 			: formatJellyfinTrack(base, item, token, userId)
 	));
+};
+
+const fetchPage = async (pageStartIndex) => {
+	try {
+		return await fetchCachedJellyfinJson(
+			pageUrl(pageStartIndex),
+			getAuthHeaders(token),
+			{ forceRefresh },
+		);
+	} catch (error) {
+		// Network failure with a synced library: fall back to the offline
+		// snapshot instead of failing the whole list.
+		if (!(await canUseSyncedData())) throw error;
+		return null;
+	}
+};
+
+// First page reveals TotalRecordCount, so the remaining pages can be fetched
+// concurrently instead of one round-trip at a time.
+const firstPage = await fetchPage(0);
+if (!firstPage) return offlineFallback();
+if (!firstPage.ok) {
+	throw new Error(`Failed to fetch music collection (${firstPage.status})`);
+}
+const firstData = await firstPage.json();
+const firstItems = firstData.Items || [];
+items.push(...firstItems);
+totalRecordCount = firstData.TotalRecordCount ?? (firstItems.length < limit ? firstItems.length : Infinity);
+
+if (items.length < totalRecordCount && firstItems.length >= limit) {
+	const pageStarts = [];
+	for (let start = limit; start < totalRecordCount; start += limit) {
+		pageStarts.push(start);
+	}
+	const pageKeys = pageStarts.map((start) => pageUrl(start));
+
+	// Resolve every page that is already cached in one indexed query, then
+	// fetch only the missing pages in small concurrent batches. Results are
+	// stored by page position so a partially cached collection keeps its
+	// server-side ordering.
+	const cachedPages = forceRefresh ? new Map() : await readCachedJellyfinEntries(pageKeys);
+	const pageItems = new Array(pageStarts.length);
+	const missingIndexes = [];
+	pageKeys.forEach((key, index) => {
+		const cachedData = cachedPages.get(key);
+		if (cachedData !== undefined) {
+			pageItems[index] = cachedData.Items || [];
+		} else {
+			missingIndexes.push(index);
+		}
+	});
+
+	const batchSize = 4;
+	for (let batchStart = 0; batchStart < missingIndexes.length; batchStart += batchSize) {
+		const batchIndexes = missingIndexes.slice(batchStart, batchStart + batchSize);
+		const pages = await Promise.all(
+			batchIndexes.map((index) => fetchPage(pageStarts[index])),
+		);
+		for (let offset = 0; offset < pages.length; offset += 1) {
+			const page = pages[offset];
+			if (!page) return offlineFallback();
+			if (!page.ok) {
+				throw new Error(`Failed to fetch music collection (${page.status})`);
+			}
+			const data = await page.json();
+			pageItems[batchIndexes[offset]] = data.Items || [];
+		}
+	}
+
+	for (const page of pageItems) items.push(...page);
+}
+
+return items.map((item) => (
+	formatEntities
+		? formatJellyfinEntity(base, item, token)
+		: formatJellyfinTrack(base, item, token, userId)
+));
 }
 
 export async function fetchMusicAlbums(serverUrl, userId, token, { forceRefresh = false } = {}) {

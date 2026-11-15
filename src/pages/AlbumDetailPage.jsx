@@ -14,7 +14,7 @@ import {
 } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
-import { fetchMusicCollection, fetchMusicItem, getVirtualAlbumName } from "../services/jellyfin";
+import { fetchMusicCollection, fetchMusicItem, getThumbnailUrl, getVirtualAlbumName } from "../services/jellyfin";
 import TrackPlayButton from "../components/TrackPlayButton";
 import Artwork from "../components/Artwork";
 
@@ -413,7 +413,7 @@ export default function AlbumDetailPage() {
 											onTogglePlay={togglePlay}
 										/>
 										<span className="flex min-w-0 items-center gap-2">
-											<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
+											<Artwork src={track.cover ? getThumbnailUrl(track.cover, 96) : track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
 											<span
 												className={`block w-fit cursor-pointer truncate text-xs font-medium hover:text-white hover:underline underline-offset-2 ${isCurrent ? "text-blue-500" : "text-zinc-200"}`}
 											>

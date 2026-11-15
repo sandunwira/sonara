@@ -15,7 +15,7 @@ import {
 } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
-import { fetchMusicCollection, fetchMusicItem, getTrackAlbumLink } from "../services/jellyfin";
+import { fetchMusicCollection, fetchMusicItem, getThumbnailUrl, getTrackAlbumLink } from "../services/jellyfin";
 import TrackPlayButton from "../components/TrackPlayButton";
 import Artwork from "../components/Artwork";
 
@@ -439,7 +439,7 @@ export default function ArtistDetailPage() {
 									>
 										<div className="relative aspect-square overflow-hidden rounded-xs border border-[#22222a] bg-[#141419]">
 											<Artwork
-												src={album.cover}
+												src={album.cover ? getThumbnailUrl(album.cover, 200) : album.cover}
 												alt=""
 												className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
 											/>
@@ -497,7 +497,7 @@ export default function ArtistDetailPage() {
 												onTogglePlay={togglePlay}
 											/>
 											<span className="flex min-w-0 items-center gap-2">
-												<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
+												<Artwork src={track.cover ? getThumbnailUrl(track.cover, 96) : track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
 												<span
 													onClick={(event) => {
 														event.stopPropagation();

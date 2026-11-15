@@ -89,8 +89,10 @@ export function JellyfinProvider({ children }) {
 
 		let cancelled = false;
 		const bootstrap = async () => {
-			const savedServers = await getStoredJellyfinServers();
-			const savedSession = await getStoredJellyfinSession();
+			const [savedServers, savedSession] = await Promise.all([
+				getStoredJellyfinServers(),
+				getStoredJellyfinSession(),
+			]);
 			if (isConfiguredSession(savedSession)) {
 				setSession(savedSession);
 				// First launch after this feature: the previously connected

@@ -1,13 +1,50 @@
-import { createContext, useContext, useState, useEffect, useRef } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import toast from "react-hot-toast";
 import { useJellyfin } from "./JellyfinContext";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { update as updateThumbarButton } from "tauri-plugin-thumbar";
 import { getAudioStreamUrl, getImageUrl } from "../services/jellyfin";
-import { getStoredPlayerQueue, saveStoredPlayerQueue, recordAppLog } from "../services/jellyfinCache";
+import {
+	getStoredPlayerQueue,
+	saveStoredPlayerQueueTracks,
+	saveStoredPlayerQueueState,
+	recordAppLog,
+} from "../services/jellyfinCache";
 
 const PlayerContext = createContext();
+
+// Playback position lives outside React state on purpose: the audio element's
+// "timeupdate" event fires ~4x/second, and keeping it in the provider made
+// every usePlayer() consumer — including 3,000-row track tables — re-render
+// continuously while music played. Components that actually display progress
+// (player bar, queue panel lyrics) subscribe through usePlayerProgress();
+// everything else only re-renders on real playback events.
+const progressListeners = new Set();
+let progressSnapshot = { currentTime: 0, duration: 0 };
+
+function setProgress(patch) {
+	const nextTime = patch.currentTime ?? progressSnapshot.currentTime;
+	const nextDuration = patch.duration ?? progressSnapshot.duration;
+	if (nextTime === progressSnapshot.currentTime && nextDuration === progressSnapshot.duration) {
+		return;
+	}
+	progressSnapshot = { currentTime: nextTime, duration: nextDuration };
+	progressListeners.forEach((listener) => listener());
+}
+
+function subscribeToProgress(listener) {
+	progressListeners.add(listener);
+	return () => progressListeners.delete(listener);
+}
+
+function getProgressSnapshot() {
+	return progressSnapshot;
+}
+
+export function usePlayerProgress() {
+	return useSyncExternalStore(subscribeToProgress, getProgressSnapshot, getProgressSnapshot);
+}
 
 function restoreSavedQueue(saved, session) {
 	if (!saved || !Array.isArray(saved.queue)) {
@@ -39,8 +76,6 @@ export function PlayerProvider({ children }) {
 	const { session, isSessionLoaded, reportTrackPlayed, reportPlaybackEvent } = useJellyfin();
 	const [currentTrack, setCurrentTrack] = useState(null);
 	const [isPlaying, setIsPlaying] = useState(false);
-	const [currentTime, setCurrentTime] = useState(0);
-	const [duration, setDuration] = useState(0);
 	const [volume, setVolumeState] = useState(85);
 	const [isMuted, setIsMuted] = useState(false);
 	const [isShuffle, setIsShuffle] = useState(false);
@@ -70,6 +105,7 @@ export function PlayerProvider({ children }) {
 	const playbackReporterRef = useRef(null);
 	const nextTrackRef = useRef(null);
 	const lastAudibleVolumeRef = useRef(85);
+	const mediaPositionRef = useRef(-1);
 
 	currentTrackRef.current = currentTrack;
 	queueRef.current = queue;
@@ -130,26 +166,39 @@ export function PlayerProvider({ children }) {
 		};
 	}, [isSessionLoaded, session]);
 
+	// Only the fields needed to rebuild stream urls and match genre cards are
+	// persisted. Recomputing this memo (and the DB write below) is tied to
+	// queue identity, not to queueIndex/current track changes.
+	const savedQueueTracks = useMemo(() => queue.map((track) => {
+		const { id, title, artist, artistId, album, albumId, duration, isJellyfin, genreNames, raw } = track;
+		return {
+			id, title, artist, artistId, album, albumId, duration, isJellyfin,
+			// Kept so a restored queue can still be matched to genre cards.
+			genreNames: genreNames || raw?.Genres || [],
+		};
+	}), [queue]);
+
 	useEffect(() => {
 		if (!queueRestoredRef.current) return;
 
-		saveStoredPlayerQueue({
-			queue: queue.map((track) => {
-				const { id, title, artist, artistId, album, albumId, duration, isJellyfin, genreNames, raw } = track;
-				return {
-					id, title, artist, artistId, album, albumId, duration, isJellyfin,
-					// Kept so a restored queue can still be matched to genre cards.
-					genreNames: genreNames || raw?.Genres || [],
-				};
-			}),
+		saveStoredPlayerQueueTracks(savedQueueTracks).catch((error) => {
+			console.error("Could not save playback queue to the database:", error);
+			toast.error("Could not save playback queue");
+		});
+	}, [savedQueueTracks]);
+
+	useEffect(() => {
+		if (!queueRestoredRef.current) return;
+
+		saveStoredPlayerQueueState({
 			queueIndex,
 			currentTrackId: currentTrack?.id || null,
 			playbackSource,
 		}).catch((error) => {
-			console.error("Could not save playback queue to the database:", error);
+			console.error("Could not save playback queue state to the database:", error);
 			toast.error("Could not save playback queue");
 		});
-	}, [queue, queueIndex, currentTrack]);
+	}, [queueIndex, currentTrack, playbackSource]);
 
 	// When the active Jellyfin server changes, the saved queue no longer makes
 	// sense (its track ids/stream urls belong to the previous server), so stop
@@ -173,8 +222,7 @@ export function PlayerProvider({ children }) {
 		activePlaybackTrackRef.current = null;
 		reportedTrackIdRef.current = null;
 		setIsPlaying(false);
-		setCurrentTime(0);
-		setDuration(0);
+		setProgress({ currentTime: 0, duration: 0 });
 		setCurrentTrack(null);
 		currentTrackRef.current = null;
 		setPlaybackSource(null);
@@ -242,6 +290,26 @@ export function PlayerProvider({ children }) {
 		}, 10_000);
 	};
 
+	// Keeps the OS media overlay's scrubber roughly in sync without making the
+	// provider re-render; called from the audio element's progress events.
+	const syncMediaSessionPosition = (position, total) => {
+		if (!("mediaSession" in navigator) || !navigator.mediaSession.setPositionState) return;
+		if (!total || !isFinite(total) || total <= 0) return;
+		if (!isFinite(position) || position < 0) return;
+		const rounded = Math.min(Math.floor(position), total);
+		if (rounded === mediaPositionRef.current) return;
+		mediaPositionRef.current = rounded;
+		try {
+			navigator.mediaSession.setPositionState({
+				duration: total,
+				playbackRate: 1,
+				position: rounded,
+			});
+		} catch {
+			// Invalid position state on this platform - ignore.
+		}
+	};
+
 	// Initialize Audio element
 	useEffect(() => {
 		const audio = new Audio();
@@ -249,12 +317,14 @@ export function PlayerProvider({ children }) {
 		audio.preload = "auto";
 
 		const onTimeUpdate = () => {
-			setCurrentTime(audio.currentTime);
+			setProgress({ currentTime: audio.currentTime });
+			syncMediaSessionPosition(audio.currentTime, audio.duration);
 		};
 
 		const onLoadedMetadata = () => {
 			if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-				setDuration(audio.duration);
+				setProgress({ duration: audio.duration });
+				syncMediaSessionPosition(audio.currentTime, audio.duration);
 			}
 		};
 
@@ -358,8 +428,8 @@ export function PlayerProvider({ children }) {
 
 		setCurrentTrack(track);
 		currentTrackRef.current = track;
-		setCurrentTime(0);
-		setDuration(track.duration || 0);
+		setProgress({ currentTime: 0, duration: track.duration || 0 });
+		mediaPositionRef.current = -1;
 
 		if (audioRef.current) {
 			if (track.streamUrl) {
@@ -541,10 +611,12 @@ export function PlayerProvider({ children }) {
 	};
 
 	const seek = (seconds) => {
-		setCurrentTime(seconds);
+		setProgress({ currentTime: seconds });
+		mediaPositionRef.current = -1;
 		if (audioRef.current && audioRef.current.src) {
 			try {
 				audioRef.current.currentTime = seconds;
+				syncMediaSessionPosition(seconds, audioRef.current.duration);
 			} catch (err) {
 				console.warn("Seek error:", err);
 			}
@@ -604,7 +676,7 @@ export function PlayerProvider({ children }) {
 	nextTrackRef.current = nextTrack;
 
 	const prevTrack = () => {
-		if (currentTime > 3) {
+		if ((audioRef.current?.currentTime ?? 0) > 3) {
 			seek(0);
 			return;
 		}
@@ -618,7 +690,6 @@ export function PlayerProvider({ children }) {
 	// ---- OS media controls (MediaSession API) ----
 	const mediaActionsRef = useRef({ togglePlay, nextTrack, prevTrack, seek });
 	mediaActionsRef.current = { togglePlay, nextTrack, prevTrack, seek };
-	const mediaPositionRef = useRef(-1);
 
 	useEffect(() => {
 		if (!("mediaSession" in navigator)) return undefined;
@@ -704,25 +775,6 @@ export function PlayerProvider({ children }) {
 		if (!("mediaSession" in navigator)) return;
 		navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
 	}, [isPlaying]);
-
-	// Keep the overlay's scrubber roughly in sync (once per second).
-	useEffect(() => {
-		if (!("mediaSession" in navigator) || !navigator.mediaSession.setPositionState) return;
-		if (!duration || !isFinite(duration) || duration <= 0) return;
-		if (!isFinite(currentTime) || currentTime < 0) return;
-		const position = Math.min(Math.floor(currentTime), duration);
-		if (position === mediaPositionRef.current) return;
-		mediaPositionRef.current = position;
-		try {
-			navigator.mediaSession.setPositionState({
-				duration,
-				playbackRate: 1,
-				position,
-			});
-		} catch {
-			// Invalid position state on this platform - ignore.
-		}
-	}, [currentTime, duration]);
 
 	// ---- Windows taskbar thumbnail toolbar (previous / play-pause / next) ----
 	// The native buttons are registered in src-tauri (lib.rs) and emit "thumbar:*" app events on click; they are handled here through the same action refs the OS media keys use.
@@ -824,8 +876,6 @@ export function PlayerProvider({ children }) {
 			value={{
 				currentTrack,
 				isPlaying,
-				currentTime,
-				duration,
 				volume,
 				isMuted,
 				isShuffle,
@@ -864,8 +914,6 @@ export function usePlayer() {
 		return {
 			currentTrack: null,
 			isPlaying: false,
-			currentTime: 0,
-			duration: 0,
 			volume: 85,
 			isMuted: false,
 			isShuffle: false,

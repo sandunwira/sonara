@@ -11,6 +11,7 @@ import {
 	IconDots,
 } from "@tabler/icons-react";
 import Artwork from "../Artwork";
+import { getThumbnailUrl } from "../../services/jellyfin";
 
 function AlbumCarousel({
 	title,
@@ -124,7 +125,7 @@ function AlbumCarousel({
 									}`}
 							>
 								<Artwork
-									src={item.cover}
+									src={item.cover ? getThumbnailUrl(item.cover, 200) : item.cover}
 									alt={item.title}
 									className="h-full w-full object-cover"
 								/>

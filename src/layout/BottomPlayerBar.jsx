@@ -18,9 +18,9 @@ import {
 	IconDots,
 	IconMusic,
 } from "@tabler/icons-react";
-import { usePlayer } from "../context/PlayerContext";
+import { usePlayer, usePlayerProgress } from "../context/PlayerContext";
 import { useJellyfin } from "../context/JellyfinContext";
-import { fetchMusicArtists } from "../services/jellyfin";
+import { fetchMusicArtists, getThumbnailUrl } from "../services/jellyfin";
 import Artwork from "../components/Artwork";
 import { useNavigate } from "react-router-dom";
 
@@ -31,12 +31,51 @@ function formatSeconds(sec) {
 	return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
 }
 
+// Progress ticks ~4x/second. Keeping the subscription in this small child
+// means the rest of the player bar (artwork, buttons, volume) is not
+// re-rendered while a track plays.
+function PlayerProgressBar({ seek, fallbackDuration }) {
+	const { currentTime, duration } = usePlayerProgress();
+	const validDuration = duration && duration > 0 ? duration : (fallbackDuration || 180);
+	const progressPercent = Math.min(100, Math.max(0, (currentTime / validDuration) * 100));
+
+	const handleSeek = (e) => {
+		const newPercent = parseFloat(e.target.value);
+		seek((newPercent / 100) * validDuration);
+	};
+
+	return (
+		<div className="mt-1 flex w-full items-center gap-2">
+			<span className="w-7 text-right text-[10px] text-zinc-400">
+				{formatSeconds(currentTime)}
+			</span>
+
+			<div className="group relative flex flex-1 items-center">
+				<input
+					type="range"
+					min="0"
+					max="100"
+					step="0.1"
+					value={progressPercent}
+					onChange={handleSeek}
+					className="h-1 w-full cursor-pointer appearance-none rounded-full bg-zinc-800 accent-white transition-all group-hover:h-1.5 focus:outline-none"
+					style={{
+						background: `linear-gradient(to right, #ffffff ${progressPercent}%, #272731 ${progressPercent}%)`,
+					}}
+				/>
+			</div>
+
+			<span className="w-7 text-left text-[10px] text-zinc-400">
+				{formatSeconds(validDuration)}
+			</span>
+		</div>
+	);
+}
+
 function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueuePanel }) {
 	const {
 		currentTrack,
 		isPlaying,
-		currentTime,
-		duration,
 		volume,
 		isMuted,
 		setVolume,
@@ -79,15 +118,8 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 		}
 	};
 
-	const validDuration = duration && duration > 0 ? duration : 180;
-	const progressPercent = Math.min(100, Math.max(0, (currentTime / validDuration) * 100));
-
-	const handleSeek = (e) => {
-		const newPercent = parseFloat(e.target.value);
-		seek((newPercent / 100) * validDuration);
-	};
 	const upcomingStartIndex = Math.max(queueIndex + 1, 0);
-	const upcomingTracks = queue.slice(upcomingStartIndex);
+	const upcomingCount = Math.max(queue.length - upcomingStartIndex, 0);
 
 	return (
 		<footer className="relative z-40 flex h-20 w-full shrink-0 items-center justify-between border-t border-[#1b1b22] bg-[#0c0c0e] px-4 text-zinc-300">
@@ -97,7 +129,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 					<>
 						<div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-xs bg-[#18181f] shadow-md border border-[#22222a]">
 							<Artwork
-								src={currentTrack.cover}
+								src={currentTrack.cover ? getThumbnailUrl(currentTrack.cover, 96) : currentTrack.cover}
 								alt={currentTrack.title}
 								loading="eager"
 								className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -220,30 +252,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 				</div>
 
 				{/* Progress Scrubber */}
-				<div className="mt-1 flex w-full items-center gap-2">
-					<span className="w-7 text-right text-[10px] text-zinc-400">
-						{formatSeconds(currentTime)}
-					</span>
-
-					<div className="group relative flex flex-1 items-center">
-						<input
-							type="range"
-							min="0"
-							max="100"
-							step="0.1"
-							value={progressPercent}
-							onChange={handleSeek}
-							className="h-1 w-full cursor-pointer appearance-none rounded-full bg-zinc-800 accent-white transition-all group-hover:h-1.5 focus:outline-none"
-							style={{
-								background: `linear-gradient(to right, #ffffff ${progressPercent}%, #272731 ${progressPercent}%)`,
-							}}
-						/>
-					</div>
-
-					<span className="w-7 text-left text-[10px] text-zinc-400">
-						{formatSeconds(validDuration)}
-					</span>
-				</div>
+				<PlayerProgressBar seek={seek} fallbackDuration={currentTrack?.duration} />
 			</div>
 
 			{/* Right auxiliary tools & volume */}
@@ -257,9 +266,9 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 					className={`relative text-zinc-400 transition hover:text-white ${isQueuePanelOpen ? "text-white" : ""}`}
 				>
 					<IconLayoutList size={14} stroke={1.8} />
-					{upcomingTracks.length > 0 && (
+					{upcomingCount > 0 && (
 						<span className="absolute -right-1.5 -top-1.5 min-w-3 rounded-full bg-blue-500 px-0.5 text-center text-[8px] leading-3 text-white">
-							{upcomingTracks.length}
+							{upcomingCount}
 						</span>
 					)}
 				</button>
