@@ -402,19 +402,6 @@ export default function LibraryCollectionPage({
 									<span className="block truncate text-xs font-semibold text-zinc-300 group-hover:text-white transition-all duration-200 cursor-pointer" title={item.title || item.name}>
 										{item.title || item.name}
 									</span>
-									{/* Options Dropdown */}
-									<button
-										type="button"
-										onClick={(event) => {
-											event.stopPropagation();
-											// Handle more actions for the item (e.g., show a dropdown menu)
-										}}
-										onKeyDown={(event) => event.stopPropagation()}
-										aria-label="More actions"
-										className="text-zinc-400 hover:text-white p-1 cursor-pointer transition"
-									>
-										<IconDotsVertical size={14} stroke={1.5} />
-									</button>
 								</div>
 							</div>
 						))}
