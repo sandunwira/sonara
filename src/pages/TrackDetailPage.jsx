@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
 	IconChevronLeft,
 	IconDisc,
+	IconDots,
 	IconMusic,
 	IconPlayerPauseFilled,
 	IconPlayerPlayFilled,
@@ -13,7 +14,6 @@ import {
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicItem, getTrackAlbumLink } from "../services/jellyfin";
-import Artwork from "../components/Artwork";
 
 function formatDuration(seconds) {
 	if (!seconds || !Number.isFinite(seconds)) return "";
@@ -42,6 +42,24 @@ export default function TrackDetailPage() {
 	const [track, setTrack] = useState(location.state?.track || null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState("");
+	const [isMenuOpen, setIsMenuOpen] = useState(false);
+	const [isScrolled, setIsScrolled] = useState(false);
+	// The title fades into the sticky bar once the hero's own title has scrolled out of view.
+	const [showHeaderTitle, setShowHeaderTitle] = useState(false);
+	const pageRef = useRef(null);
+
+	useEffect(() => {
+		const scrollContainer = pageRef.current?.closest("main");
+		if (!scrollContainer) return undefined;
+
+		const handleScroll = () => {
+			setIsScrolled(scrollContainer.scrollTop > 25);
+			setShowHeaderTitle(scrollContainer.scrollTop > 120);
+		};
+		handleScroll();
+		scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+		return () => scrollContainer.removeEventListener("scroll", handleScroll);
+	}, []);
 
 	useEffect(() => {
 		setTrack(location.state?.track || null);
@@ -114,30 +132,7 @@ export default function TrackDetailPage() {
 	};
 
 	return (
-		<div className="flex flex-col">
-			{/* Header */}
-			<header className="sticky top-0 z-30 flex items-center gap-2 bg-[#0a0a0d] py-7">
-				<button
-					type="button"
-					onClick={() => navigate(-1)}
-					aria-label="Back to Tracks"
-					className="flex h-8 w-8 shrink-0 items-center justify-center text-zinc-400 transition hover:text-white"
-				>
-					<IconChevronLeft size={16} />
-				</button>
-				<div className="flex min-w-0 items-center gap-2">
-					<IconMusic size={19} stroke={1.7} className="shrink-0" />
-					<h1 className="truncate text-xl font-bold tracking-tight text-white">
-						{track?.title || "Track"}
-					</h1>
-					{track?.duration && (
-						<span className="shrink-0 rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">
-							{formatDuration(track.duration)}
-						</span>
-					)}
-				</div>
-			</header>
-
+		<div ref={pageRef} className="flex flex-col">
 			{!isAuthenticated ? (
 				<div className="flex flex-col items-center justify-center py-16 text-center">
 					<div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xs border border-blue-500/20 bg-blue-500/10 text-blue-400">
@@ -169,65 +164,137 @@ export default function TrackDetailPage() {
 				</div>
 			) : (
 				<>
-					{/* Hero */}
-					<section className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-start">
-						<div className="aspect-square w-40 shrink-0 overflow-hidden rounded-xs border border-[#22222a] bg-[#141419] sm:w-48">
-							<Artwork src={track.cover} alt={track.title} className="h-full w-full object-cover" />
-						</div>
-						<div className="min-w-0 flex-1">
-							<p className="truncate text-sm font-semibold text-zinc-100">{track.artist}</p>
-							{track.album && (
-								<button
-									type="button"
-									onClick={() => {
-										const albumLink = getTrackAlbumLink(track);
-										if (albumLink) navigate(`/albums/${albumLink.id}`, { state: { title: track.album } });
-									}}
-									disabled={!getTrackAlbumLink(track)}
-									className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-zinc-500 transition hover:text-white disabled:cursor-default"
-								>
-									<IconDisc size={13} stroke={1.8} />
-									<span className="truncate">
-										{track.album}
-										{raw.ProductionYear ? ` · ${raw.ProductionYear}` : ""}
-									</span>
-								</button>
-							)}
+					<div
+						className={`flex flex-row items-center sticky top-0 -mx-7 px-5 py-3.5 ${
+							isScrolled ? "backdrop-blur-md bg-linear-to-b from-[#0a0a0d]/75 via-[#0a0a0d]/50 to-transparent" : "backdrop-blur-none bg-linear-to-b from-transparent via-transparent to-transparent"
+						} transition-all duration-400`}
+					>
+						<button
+							type="button"
+							onClick={() => navigate(-1)}
+							aria-label="Go back"
+							className="flex h-9 w-9 items-center justify-center backdrop-blur-md rounded-full transition border border-zinc-500 text-zinc-200 hover:text-white bg-black/15 cursor-pointer"
+						>
+							<IconChevronLeft size={18} />
+						</button>
+						<span
+							className={`ml-3 min-w-0 truncate text-sm font-bold tracking-tight text-white transition-all duration-300 ${showHeaderTitle ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"}`}
+						>
+							{track?.title || "Track"}
+						</span>
+					</div>
 
-							<div className="mt-4 flex items-center gap-2">
-								<button
-									type="button"
-									onClick={handlePlay}
-									className="flex items-center gap-2 rounded-xs bg-blue-600 px-4 py-2 text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 active:scale-[0.99]"
-								>
-									{isCurrentTrack && isPlaying
-										? <IconPlayerPauseFilled size={13} />
-										: <IconPlayerPlayFilled size={13} />}
-									{isCurrentTrack && isPlaying ? "Pause" : "Play"}
-								</button>
-								<button
-									type="button"
-									onClick={() => playNext(track)}
-									title="Play next"
-									aria-label="Play this track next"
-									className="flex items-center gap-2 rounded-xs border border-[#2b2b36] bg-[#1a1a23] px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-[#252533] hover:text-white"
-								>
-									<IconPlayerTrackNext size={14} stroke={1.8} />
-									Play Next
-								</button>
-								<button
-									type="button"
-									onClick={() => playLast(track)}
-									title="Add to queue"
-									aria-label="Add this track to the queue"
-									className="flex items-center gap-2 rounded-xs border border-[#2b2b36] bg-[#1a1a23] px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-[#252533] hover:text-white"
-								>
-									<IconPlaylistAdd size={14} stroke={1.8} />
-									Add to Queue
-								</button>
+					{/* Hero banner: full-bleed album cover with the track title, artist
+					    and album links anchored bottom-left (same layout as the artist
+					    and album pages). */}
+					<section className="-mx-7 -mt-16 bg-[#141419] flex items-center justify-center h-72">
+						{track.cover ? (
+							<div
+								className="h-full w-full flex flex-col justify-end bg-[#141419]"
+								style={{ backgroundImage: `linear-gradient(#0a0a0d00, #0a0a0da0, #0a0a0dff), url(${track.cover})`, backgroundSize: "cover", backgroundPosition: "center" }}
+							>
+								<div className="p-7 pb-6">
+									<h1 className="wrap-break-word text-4xl font-extrabold leading-none tracking-tighter text-white sm:text-6xl">
+										{track.title || "Track"}
+									</h1>
+									<p className="mt-2 truncate text-xs text-zinc-300">
+										{track.artistId ? (
+											<button
+												type="button"
+												onClick={() => navigate(`/artists/${track.artistId}`, { state: { title: track.artist } })}
+												title="View artist"
+												className="cursor-pointer font-semibold text-zinc-100 hover:underline underline-offset-2"
+											>
+												{track.artist}
+											</button>
+										) : (
+											<span className="font-semibold text-zinc-100">{track.artist}</span>
+										)}
+									</p>
+									{track.album && (
+										<button
+											type="button"
+											onClick={() => {
+												const albumLink = getTrackAlbumLink(track);
+												if (albumLink) navigate(`/albums/${albumLink.id}`, { state: { title: track.album } });
+											}}
+											disabled={!getTrackAlbumLink(track)}
+											className="mt-1 flex w-fit items-center gap-1.5 truncate text-xs text-zinc-300 transition hover:text-white disabled:cursor-default"
+										>
+											<IconDisc size={13} stroke={1.8} />
+											<span className="truncate">
+												{track.album}
+												{raw.ProductionYear ? ` · ${raw.ProductionYear}` : ""}
+											</span>
+										</button>
+									)}
+								</div>
 							</div>
-						</div>
+						) : (
+							<IconMusic size={64} className="text-zinc-700" />
+						)}
 					</section>
+
+					{/* Action bar: large play pill and an overflow menu holding the
+					    queue actions (single track, so no shuffle toggle). */}
+					<div className="mb-6 flex items-center gap-5 py-4">
+						<button
+							type="button"
+							onClick={handlePlay}
+							title={isCurrentTrack && isPlaying ? "Pause" : "Play"}
+							aria-label={isCurrentTrack && isPlaying ? "Pause this track" : "Play this track"}
+							className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500 cursor-pointer"
+						>
+							{isCurrentTrack && isPlaying
+								? <IconPlayerPauseFilled size={20} />
+								: <IconPlayerPlayFilled size={20} />}
+						</button>
+						<div className="relative">
+							<button
+								type="button"
+								onClick={() => setIsMenuOpen((open) => !open)}
+								title="More actions"
+								aria-label="More actions"
+								className="p-1 text-zinc-400 transition hover:text-white"
+							>
+								<IconDots size={20} />
+							</button>
+							{isMenuOpen && (
+								<>
+									<div
+										className="fixed inset-0 z-40"
+										onClick={() => setIsMenuOpen(false)}
+									/>
+									<div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-xs border border-[#2b2b36] bg-[#18181f] py-1 shadow-xl">
+										<button
+											type="button"
+											onClick={() => {
+												playNext(track);
+												setIsMenuOpen(false);
+											}}
+											title="Play next"
+											className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white"
+										>
+											<IconPlayerTrackNext size={14} stroke={1.8} />
+											Play Next
+										</button>
+										<button
+											type="button"
+											onClick={() => {
+												playLast(track);
+												setIsMenuOpen(false);
+											}}
+											title="Add to queue"
+											className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white"
+										>
+											<IconPlaylistAdd size={14} stroke={1.8} />
+											Add to Queue
+										</button>
+									</div>
+								</>
+							)}
+						</div>
+					</div>
 
 					{/* Metadata */}
 					<section>

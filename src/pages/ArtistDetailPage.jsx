@@ -53,13 +53,18 @@ export default function ArtistDetailPage() {
 	const [error, setError] = useState("");
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	const [isScrolled, setIsScrolled] = useState(false);
+	// The title fades into the sticky bar once the hero's own title has scrolled out of view.
+	const [showHeaderTitle, setShowHeaderTitle] = useState(false);
 	const pageRef = useRef(null);
 
 	useEffect(() => {
 		const scrollContainer = pageRef.current?.closest("main");
 		if (!scrollContainer) return undefined;
 
-		const handleScroll = () => setIsScrolled(scrollContainer.scrollTop > 25);
+		const handleScroll = () => {
+			setIsScrolled(scrollContainer.scrollTop > 25);
+			setShowHeaderTitle(scrollContainer.scrollTop > 120);
+		};
 		handleScroll();
 		scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
 		return () => scrollContainer.removeEventListener("scroll", handleScroll);
@@ -210,6 +215,11 @@ export default function ArtistDetailPage() {
 						>
 							<IconChevronLeft size={18} />
 						</button>
+						<span
+							className={`ml-3 min-w-0 truncate text-sm font-bold tracking-tight text-white transition-all duration-300 ${showHeaderTitle ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"}`}
+						>
+							{artistName || artist?.title || "Artist"}
+						</span>
 					</div>
 
 					<section className="-mx-7 -mt-16 bg-[#141419] flex items-center justify-center h-72">
