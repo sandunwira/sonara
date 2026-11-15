@@ -222,11 +222,19 @@ export default function LibraryCollectionPage({
 				) : (
 					<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 						{visibleItems.map((item) => (
-							<button
+							<div
 								key={item.id}
-								type="button"
+								role="button"
+								tabIndex={0}
 								onClick={() => navigate(`${detailPath}/${item.id}`, { state: { title: item.title || item.name } })}
-								className="min-w-0 text-left group"
+								onKeyDown={(event) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										navigate(`${detailPath}/${item.id}`, { state: { title: item.title || item.name } });
+									}
+								}}
+								aria-label={`Open ${item.title || item.name}`}
+								className="min-w-0 text-left group cursor-pointer"
 							>
 								<div className={`relative aspect-square rounded-xs border border-[#22222a] bg-[#141419] brightness-90 grayscale-60 group-hover:grayscale-0 group-hover:brightness-100 group-focus:outline-none group-focus-visible:brightness-100 transition-all duration-200 ${isFolderList && !item.cover ? "flex items-center justify-center" : ""}`}>
 									{isFolderList && item.cover ? (
@@ -248,13 +256,14 @@ export default function LibraryCollectionPage({
 											event.stopPropagation();
 											// Handle more actions for the item (e.g., show a dropdown menu)
 										}}
+										onKeyDown={(event) => event.stopPropagation()}
 										aria-label="More actions"
 										className="text-zinc-400 hover:text-white p-1 cursor-pointer transition"
 									>
 										<IconDotsVertical size={14} stroke={1.5} />
 									</button>
 								</div>
-							</button>
+							</div>
 						))}
 					</div>
 				)
