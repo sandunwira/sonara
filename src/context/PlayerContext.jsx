@@ -109,9 +109,9 @@ export function PlayerProvider({ children }) {
 
 		saveStoredPlayerQueue({
 			queue: queue.map((track) => {
-				const { id, title, artist, album, albumId, duration, isJellyfin, genreNames, raw } = track;
+				const { id, title, artist, artistId, album, albumId, duration, isJellyfin, genreNames, raw } = track;
 				return {
-					id, title, artist, album, albumId, duration, isJellyfin,
+					id, title, artist, artistId, album, albumId, duration, isJellyfin,
 					// Kept so a restored queue can still be matched to genre cards.
 					genreNames: genreNames || raw?.Genres || [],
 				};

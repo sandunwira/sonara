@@ -19,7 +19,10 @@ import {
 	IconMusic,
 } from "@tabler/icons-react";
 import { usePlayer } from "../context/PlayerContext";
+import { useJellyfin } from "../context/JellyfinContext";
+import { fetchMusicArtists } from "../services/jellyfin";
 import Artwork from "../components/Artwork";
+import { useNavigate } from "react-router-dom";
 
 function formatSeconds(sec) {
 	if (!sec || isNaN(sec) || !isFinite(sec)) return "0:00";
@@ -49,8 +52,32 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 		queue,
 		queueIndex,
 	} = usePlayer();
+	const { session } = useJellyfin();
+	const navigate = useNavigate();
 
 	const [isFavorite, setIsFavorite] = useState(false);
+
+	// Navigates to the clicked artist's page. Tracks fetched through
+	// formatJellyfinTrack carry a persisted artistId; tracks restored from an
+	// older saved queue don't, so those are resolved by name against the
+	// (cached) artist list instead of landing on a broken url.
+	const navigateToArtist = async () => {
+		if (currentTrack.artistId) {
+			navigate(`/artists/${currentTrack.artistId}`, { state: { title: currentTrack.artist } });
+			return;
+		}
+		if (!session || !currentTrack.artist) return;
+		try {
+			const artists = await fetchMusicArtists(session.serverUrl, session.userId, session.accessToken);
+			const match = artists.find((artist) => artist.name === currentTrack.artist)
+				|| artists.find((artist) => currentTrack.artist.includes(artist.name));
+			if (match) {
+				navigate(`/artists/${match.id}`, { state: { title: currentTrack.artist } });
+			}
+		} catch {
+			// Offline or lookup failed; do nothing rather than navigating to a bad url.
+		}
+	};
 
 	const validDuration = duration && duration > 0 ? duration : 180;
 	const progressPercent = Math.min(100, Math.max(0, (currentTime / validDuration) * 100));
@@ -79,7 +106,14 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 
 						<div className="flex min-w-0 flex-1 flex-col justify-center">
 							<div className="flex items-center gap-1.5">
-								<span className="w-fit truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+								<span
+									onClick={(event) => {
+										event.stopPropagation();
+										navigate(`/tracks/${currentTrack.id}`, { state: { currentTrack } });
+									}}
+									title={currentTrack.title}
+									className="w-fit truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+								>
 									{currentTrack.title}
 								</span>
 								{/* {onTrackOptions && (
@@ -93,7 +127,13 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 									</button>
 								)} */}
 							</div>
-							<span className="w-fit truncate text-[11px] font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200">
+							<span
+								onClick={(event) => {
+									event.stopPropagation();
+									navigateToArtist();
+								}}
+								title={currentTrack.artist}
+								className="w-fit truncate text-[11px] font-light text-zinc-400 cursor-pointer hover:text-white hover:underline underline-offset-2 transition-all duration-200">
 								{currentTrack.artist}
 							</span>
 						</div>

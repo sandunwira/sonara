@@ -519,6 +519,14 @@ function formatJellyfinTrack(serverUrl, item, token, userId) {
 		item.AlbumArtist ||
 		"Unknown Artist";
 
+	// Stable artist id for navigation (e.g. the bottom player bar). Persisted with the queue, so it survives app restarts (unlike `raw`, which is stripped when the queue is saved). The displayed artist string is matched against the item's artist entries first so feature tracks link to the artist actually shown.
+	const artistId =
+		item.ArtistItems?.find((entry) => entry.Name === artist)?.Id
+		|| item.AlbumArtists?.find((entry) => entry.Name === artist)?.Id
+		|| item.ArtistItems?.[0]?.Id
+		|| item.AlbumArtists?.[0]?.Id
+		|| null;
+
 	const cover =
 		getImageUrl(serverUrl, item.Id, token) ||
 		(item.AlbumId ? getImageUrl(serverUrl, item.AlbumId, token) : null);
@@ -527,6 +535,7 @@ function formatJellyfinTrack(serverUrl, item, token, userId) {
 		id: item.Id,
 		title: item.Name || "Untitled Track",
 		artist: artist,
+		artistId: artistId,
 		album: item.Album || "Unknown Album",
 		albumId: item.AlbumId,
 		duration: durationSeconds,
