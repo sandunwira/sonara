@@ -75,6 +75,11 @@
 				"language": "en-US"
 			}
 		},
-		"resources": []
+		"resources": [
+			"icons/thumbar/previous.ico",
+			"icons/thumbar/play.ico",
+			"icons/thumbar/pause.ico",
+			"icons/thumbar/next.ico"
+		]
 	}
 }

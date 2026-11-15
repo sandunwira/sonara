@@ -136,9 +136,34 @@ pub fn run() {
             let _ = app
                 .handle()
                 .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}));
+
+            // Taskbar thumbnail toolbar (previous / play-pause / next) shown in the Windows taskbar hover preview.
+            // Button clicks are forwarded to the frontend as `thumbar:*` events, which PlayerContext handles.
+            #[cfg(target_os = "windows")]
+            {
+                use tauri_plugin_thumbar::{Button, ThumbarExt};
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = app.thumbar().initialize(
+                        &window,
+                        vec![
+                            Button::new(1, "icons/thumbar/previous.ico")
+                                .tooltip("Previous")
+                                .event("thumbar:previous"),
+                            Button::new(2, "icons/thumbar/play.ico")
+                                .tooltip("Play")
+                                .event("thumbar:toggle"),
+                            Button::new(3, "icons/thumbar/next.ico")
+                                .tooltip("Next")
+                                .event("thumbar:next"),
+                        ],
+                        None,
+                    );
+                }
+            }
             Ok(())
         })
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_thumbar::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:sonara_cache.db", migrations)

@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
 import { useJellyfin } from "./JellyfinContext";
+import { isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { update as updateThumbarButton } from "tauri-plugin-thumbar";
 import { getAudioStreamUrl, getImageUrl } from "../services/jellyfin";
 import { getStoredPlayerQueue, saveStoredPlayerQueue, recordAppLog } from "../services/jellyfinCache";
 
@@ -688,6 +691,57 @@ export function PlayerProvider({ children }) {
 			// Invalid position state on this platform - ignore.
 		}
 	}, [currentTime, duration]);
+
+	// ---- Windows taskbar thumbnail toolbar (previous / play-pause / next) ----
+	// The native buttons are registered in src-tauri (lib.rs) and emit "thumbar:*" app events on click; they are handled here through the same action refs the OS media keys use.
+	useEffect(() => {
+		if (!isTauri()) return undefined;
+		let disposed = false;
+		const unlisteners = [];
+		const handle = (action) => () => mediaActionsRef.current[action]?.();
+
+		listen("thumbar:toggle", handle("togglePlay"))
+			.then((unlisten) => {
+				if (disposed) unlisten();
+				else unlisteners.push(unlisten);
+			})
+			.catch(() => { });
+		listen("thumbar:next", handle("nextTrack"))
+			.then((unlisten) => {
+				if (disposed) unlisten();
+				else unlisteners.push(unlisten);
+			})
+			.catch(() => { });
+		listen("thumbar:previous", handle("prevTrack"))
+			.then((unlisten) => {
+				if (disposed) unlisten();
+				else unlisteners.push(unlisten);
+			})
+			.catch(() => { });
+
+		return () => {
+			disposed = true;
+			unlisteners.forEach((unlisten) => unlisten());
+		};
+	}, []);
+
+	// Keeps the toolbar's play/pause button icon (and the enabled state of all three buttons) in sync with playback. No-ops on non-Windows platforms.
+	useEffect(() => {
+		if (!isTauri()) return;
+		const hasTrack = Boolean(currentTrack);
+		Promise.all([
+			updateThumbarButton({ id: 1, enabled: hasTrack }),
+			updateThumbarButton({
+				id: 2,
+				enabled: hasTrack,
+				icon: isPlaying ? "icons/thumbar/pause.ico" : "icons/thumbar/play.ico",
+				tooltip: isPlaying ? "Pause" : "Play",
+			}),
+			updateThumbarButton({ id: 3, enabled: hasTrack }),
+		]).catch(() => {
+			// Thumbar not initialized (e.g. non-Windows platform); ignore.
+		});
+	}, [currentTrack, isPlaying]);
 
 	const toggleShuffle = () => setIsShuffle((prev) => !prev);
 	// Cycles repeat: off → all (loop queue) → one (loop track) → off.

@@ -27,6 +27,7 @@
 		"core:window:allow-toggle-maximize",
 		"core:webview:allow-create-webview-window",
 		"sql:default",
-		"sql:allow-execute"
+		"sql:allow-execute",
+		"thumbar:default"
 	]
 }
