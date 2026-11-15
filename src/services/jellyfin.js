@@ -307,6 +307,21 @@ export function getTrackAlbumLink(track) {
 	return { id: makeVirtualAlbumId(name, artistId), title: name };
 }
 
+// Resolves the artist page a track should link to: the real artist entity
+// when Jellyfin provides an ArtistId, otherwise a virtual artist keyed on
+// the track's Artist tag. Returns null when there is nothing to link to.
+export function getTrackArtistLink(track) {
+	if (track?.artistId && /^[0-9a-f]{32}$/i.test(track.artistId)) {
+		return { id: track.artistId, name: track.artist || "" };
+	}
+	const name = track?.artist?.trim();
+	if (!name) return null;
+	const artistId = track?.raw?.AlbumArtists?.[0]?.Id
+		|| track?.raw?.ArtistItems?.[0]?.Id
+		|| null;
+	return { id: artistId, name };
+}
+
 export async function fetchMusicArtists(serverUrl, userId, token, { forceRefresh = false } = {}) {
 	const base = cleanUrl(serverUrl);
 	const params = new URLSearchParams({

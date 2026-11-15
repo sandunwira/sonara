@@ -10,7 +10,7 @@ import {
 import { usePlayer } from "../context/PlayerContext";
 import Artwork from "../components/Artwork";
 import { fetchLyrics } from "../services/lyrics";
-import { getTrackAlbumLink } from "../services/jellyfin";
+import { getTrackArtistLink } from "../services/jellyfin";
 
 // Collapsible right-side panel with a now-playing preview, lyrics for the
 // current track (when LRCLIB has any) and the queue. The wrapper animates its
@@ -162,11 +162,16 @@ function QueuePanel({ isOpen, onClose }) {
 										{currentTrack.title}
 									</p>
 									<p
+										// onClick={() => {
+										// 	const albumLink = getTrackAlbumLink(currentTrack);
+										// 	if (albumLink) navigate(`/albums/${albumLink.id}`, { state: { title: currentTrack.album } });
+										// }}
 										onClick={() => {
-											const albumLink = getTrackAlbumLink(currentTrack);
-											if (albumLink) navigate(`/albums/${albumLink.id}`, { state: { title: currentTrack.album } });
+											const artistLink = getTrackArtistLink(currentTrack);
+											if (artistLink) navigate(`/artists/${artistLink.id}`, { state: { name: currentTrack.artist } });
 										}}
-										title="View album"
+										// title="View album"
+										title="View artist"
 										className="truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
 									>
 										{currentTrack.artist}
