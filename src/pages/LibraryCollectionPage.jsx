@@ -6,6 +6,7 @@ import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicCollection, fetchMusicItem, getTrackAlbumLink } from "../services/jellyfin";
 import useGenrePlayback from "../hooks/useGenrePlayback";
 import GenrePlayButton from "../components/GenrePlayButton";
+import TrackPlayButton from "../components/TrackPlayButton";
 import Artwork from "../components/Artwork";
 
 function formatDuration(seconds) {
@@ -27,7 +28,7 @@ export default function LibraryCollectionPage({
 	const location = useLocation();
 	const navigate = useNavigate();
 	const { session, isAuthenticated, openServerModal, libraryVersion } = useJellyfin();
-	const { playTrack } = usePlayer();
+	const { playTrack, currentTrack, isPlaying: isPlayerPlaying, togglePlay: togglePlayerPlay } = usePlayer();
 	const { playGenre, pendingGenreIds, activeGenreId, currentGenreNames, isPlaying, togglePlay } = useGenrePlayback();
 	const [items, setItems] = useState([]);
 	const [isLoading, setIsLoading] = useState(false);
@@ -260,9 +261,9 @@ export default function LibraryCollectionPage({
 			) : (
 				<div className="overflow-hidden rounded-xs border border-[#22222a] bg-[#101014]">
 					<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] gap-3 border-b border-[#22222a] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]">
-						<span className="hidden sm:block">#</span>
+						<span className="block text-center">#</span>
 						<span>Title</span>
-						<span className="hidden sm:block">Album</span>
+						<span className="block">Album</span>
 						<span className="text-right">Time</span>
 						<span></span>
 					</div>
@@ -281,9 +282,15 @@ export default function LibraryCollectionPage({
 									}
 								}}
 								aria-label={`Play ${track.title || "track"}`}
-								className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
+								className="group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
 							>
-								<span className="block text-[11px] text-zinc-600">{index + 1}</span>
+								<TrackPlayButton
+									index={index}
+									isCurrent={currentTrack?.id === track.id}
+									isPlaying={isPlayerPlaying}
+									onPlay={() => playFromList(track)}
+									onTogglePlay={togglePlayerPlay}
+								/>
 								<span className="flex min-w-0 items-center gap-3">
 									<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
 									<span className="min-w-0">
@@ -293,7 +300,7 @@ export default function LibraryCollectionPage({
 												navigate(`/tracks/${track.id}`, { state: { track } });
 											}}
 											title="View track details"
-											className="block truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+											className={`block truncate text-xs font-semibold ${currentTrack?.id === track.id ? "text-blue-500" : "text-white"} cursor-pointer hover:underline underline-offset-2 transition-all duration-200`}
 										>
 											{track.title}
 										</span>

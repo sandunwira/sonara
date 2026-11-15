@@ -13,6 +13,7 @@ import {
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicCollection, fetchMusicItem, getVirtualAlbumName } from "../services/jellyfin";
+import TrackPlayButton from "../components/TrackPlayButton";
 import Artwork from "../components/Artwork";
 
 function formatDuration(seconds) {
@@ -322,13 +323,27 @@ export default function AlbumDetailPage() {
 							{tracks.map((track, index) => {
 								const isCurrent = currentTrack?.id === track.id;
 								return (
-									<button
+									<div
 										key={track.id}
-										type="button"
+										role="button"
+										tabIndex={0}
 										onClick={() => playFromList(track)}
-										className="grid w-full grid-cols-[minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_4rem]"
+										onKeyDown={(event) => {
+											if (event.key === "Enter" || event.key === " ") {
+												event.preventDefault();
+												playFromList(track);
+											}
+										}}
+										aria-label={`Play ${track.title || "track"}`}
+										className="group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_4rem]"
 									>
-										<span className="hidden text-[11px] text-zinc-600 sm:block">{index + 1}</span>
+										<TrackPlayButton
+											index={index}
+											isCurrent={isCurrent}
+											isPlaying={isPlaying}
+											onPlay={() => playFromList(track)}
+											onTogglePlay={togglePlay}
+										/>
 										<span className="flex min-w-0 items-center gap-2">
 											<Artwork src={track.cover} alt="" className="h-9 w-9 shrink-0 rounded-xs object-cover" />
 											<span
@@ -340,7 +355,7 @@ export default function AlbumDetailPage() {
 										<span className="text-right text-[11px] text-zinc-500">
 											{formatDuration(track.duration)}
 										</span>
-									</button>
+									</div>
 								);
 							})}
 						</div>
