@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
 	IconArrowsShuffle,
 	IconPlayerSkipBackFilled,
@@ -21,6 +20,7 @@ import {
 import { usePlayer, usePlayerProgress } from "../context/PlayerContext";
 import { useJellyfin } from "../context/JellyfinContext";
 import { fetchMusicArtists, getThumbnailUrl } from "../services/jellyfin";
+import useFavoriteToggle from "../hooks/useFavoriteToggle";
 import Artwork from "../components/Artwork";
 import { useNavigate } from "react-router-dom";
 
@@ -94,7 +94,9 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 	const { session } = useJellyfin();
 	const navigate = useNavigate();
 
-	const [isFavorite, setIsFavorite] = useState(false);
+	// Shared favorite toggle for the currently playing track (same logic as
+	// the track options menu: server-backed, optimistic, toasts on failure).
+	const { isFavorite, toggleFavorite } = useFavoriteToggle(currentTrack);
 
 	// Navigates to the clicked artist's page. Tracks fetched through
 	// formatJellyfinTrack carry a persisted artistId; tracks restored from an
@@ -276,9 +278,10 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 				{/* Favorite */}
 				<button
 					type="button"
-					onClick={() => setIsFavorite(!isFavorite)}
+					onClick={toggleFavorite}
+					title={isFavorite ? "Remove from favorites" : "Add to favorites"}
 					aria-label="Favorite"
-					className={`transition hover:text-white ${isFavorite ? "text-red-500 hover:text-red-400" : ""
+					className={`transition ${isFavorite ? "text-red-500 hover:text-red-400" : "hover:text-white"
 						}`}
 				>
 					<IconHeart

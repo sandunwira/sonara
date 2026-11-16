@@ -26,10 +26,9 @@ import {
 	fetchJellyfinPlaylists,
 	getTrackAlbumLink,
 	getTrackArtistLink,
-	setJellyfinFavorite,
 } from "../services/jellyfin";
 import { downloadTrackOffline, useDownloadedTracks } from "../services/offlineDownloads";
-import { invalidateJellyfinFavoriteEntries } from "../services/jellyfinCache";
+import useFavoriteToggle from "../hooks/useFavoriteToggle";
 import PlaylistNameModal from "./modals/PlaylistNameModal";
 import TrackFileInfoModal from "./modals/TrackFileInfoModal";
 
@@ -121,7 +120,7 @@ export default function TrackOptionsMenu({
 	align = "right",
 	className = "",
 }) {
-	const { session, bumpLibraryVersion } = useJellyfin();
+	const { session } = useJellyfin();
 	const { playNow, playNext, playLast, addToQueue } = usePlayer();
 	const navigate = useNavigate();
 
@@ -141,18 +140,17 @@ export default function TrackOptionsMenu({
 	const [playlistsState, setPlaylistsState] = useState("idle"); // idle | loading | ready | error
 	const [playlistModalOpen, setPlaylistModalOpen] = useState(false);
 	const [fileInfoOpen, setFileInfoOpen] = useState(false);
-	const [isFavorite, setIsFavorite] = useState(Boolean(track?.raw?.UserData?.IsFavorite));
-
-	// The raw UserData flag is the source of truth; re-sync whenever the
-	// track row is re-rendered with a different item or fresh metadata.
-	useEffect(() => {
-		setIsFavorite(Boolean(track?.raw?.UserData?.IsFavorite));
-	}, [track?.id, track?.raw?.UserData?.IsFavorite]);
 
 	const closeMenu = useCallback(() => {
 		setIsOpen(false);
 		setOpenSubmenu(null);
 	}, []);
+
+	// Shared favorite toggle (optimistic server-backed state; also used by
+	// the bottom player bar). Success closes the menu, failure keeps it open.
+	const { isFavorite, toggleFavorite } = useFavoriteToggle(track, {
+		onSuccess: () => closeMenu(),
+	});
 
 	const loadPlaylists = useCallback(async () => {
 		if (!session) return;
@@ -234,35 +232,6 @@ export default function TrackOptionsMenu({
 	// Artist routes only resolve real Jellyfin ids; a name-derived virtual
 	// artist (id === null) has no page to navigate to.
 	const canOpenArtist = Boolean(artistLink && /^[0-9a-f]{32}$/i.test(artistLink.id || ""));
-
-	const handleToggleFavorite = async () => {
-		const next = !isFavorite;
-		setIsFavorite(next);
-		try {
-			await setJellyfinFavorite(
-				session.serverUrl,
-				session.userId,
-				track.id,
-				session.accessToken,
-				next,
-			);
-			// Keep the raw item (the menu's source of truth for favorite
-			// state) in sync so a re-render can't revert the optimistic flag.
-			if (track.raw?.UserData) {
-				track.raw.UserData.IsFavorite = next;
-			}
-			// The response cache holds stale favorite state: drop the cached
-			// favorites collection and this item's cached detail, then let
-			// open pages (e.g. the Favorites section) refetch fresh data.
-			await invalidateJellyfinFavoriteEntries(track.id);
-			bumpLibraryVersion();
-			// Success closes the menu; failures keep it open for a retry.
-			closeMenu();
-		} catch (error) {
-			setIsFavorite(!next);
-			toast.error(error?.message || "Could not update favorites");
-		}
-	};
 
 	const handleAddToPlaylist = (playlist) => {
 		toast.promise(
@@ -463,7 +432,7 @@ export default function TrackOptionsMenu({
 						<button
 							type="button"
 							onMouseEnter={() => setOpenSubmenu(null)}
-							onClick={handleToggleFavorite}
+							onClick={toggleFavorite}
 							className={itemClass}
 						>
 							{isFavorite
