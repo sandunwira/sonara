@@ -164,8 +164,15 @@ export default function LibraryCollectionPage({
 		let cancelled = false;
 		setDetailTitle(location.state?.title || "");
 		const load = async () => {
-			setIsLoading(true);
-			setErrorState({ key: requestKey, message: "" });
+			// Stale-while-revalidate: when this collection already has data on
+			// screen (e.g. a background refetch after a favorite toggle bumps
+			// libraryVersion), keep the current list visible instead of
+			// flashing the blocking loading state.
+			const hasCurrentData = loadedCollection.key === requestKey && loadedCollection.items.length > 0;
+			if (!hasCurrentData) {
+				setIsLoading(true);
+				setErrorState({ key: requestKey, message: "" });
+			}
 			try {
 				let data;
 				if (detailId) {
@@ -187,10 +194,24 @@ export default function LibraryCollectionPage({
 				} else {
 					data = await loadItems(session);
 				}
-				if (!cancelled) setLoadedCollection({ key: requestKey, items: data });
+				if (!cancelled) {
+					// Background refresh of unchanged data (cache hit returns
+					// fresh objects every time): skip the state update when
+					// the item sequence is identical, so memoized rows,
+					// scroll position and incremental rendering stay put.
+					const previous = loadedCollection.key === requestKey ? loadedCollection.items : null;
+					const unchanged = Boolean(previous)
+						&& previous.length === data.length
+						&& previous.every((item, index) => item === data[index] || item.id === data[index]?.id);
+					if (!unchanged) {
+						setLoadedCollection({ key: requestKey, items: data });
+					}
+				}
 			} catch (loadError) {
 				console.error(`Failed to load ${title.toLowerCase()}:`, loadError);
-				if (!cancelled) {
+				// A failed background refresh keeps the already-rendered list;
+				// a failed first load shows the error state.
+				if (!cancelled && !hasCurrentData) {
 					setLoadedCollection({ key: requestKey, items: [] });
 					setErrorState({
 						key: requestKey,

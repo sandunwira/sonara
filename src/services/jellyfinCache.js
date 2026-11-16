@@ -323,6 +323,27 @@ async function requestJellyfinJson(url, headers, database) {
 	return { ok: false, status: response.status, statusText: response.statusText, data: null };
 }
 
+// Favorites are user-mutable server state the response cache cannot know
+// about: after a favorite toggle, drop every cached entry that carries
+// favorite state — the IsFavorite-filtered collection responses and any
+// item detail keyed by the item id — so the next read refetches fresh data.
+export async function invalidateJellyfinFavoriteEntries(itemId = null) {
+	const database = await getDatabase();
+	if (!database) return;
+
+	const patterns = ["%IsFavorite=true%"];
+	if (itemId) patterns.push(`%${itemId}%`);
+	let deleted = 0;
+	for (const pattern of patterns) {
+		const result = await database.execute(
+			"DELETE FROM jellyfin_responses WHERE cache_key LIKE $1",
+			[pattern],
+		);
+		deleted += result?.rowsAffected ?? 0;
+	}
+	if (deleted > 0) invalidateCachedJellyfinItems();
+}
+
 export async function fetchCachedJellyfinJson(url, headers, { forceRefresh = false } = {}) {
 	const key = url;
 	const database = await getDatabase();

@@ -643,6 +643,9 @@ export function JellyfinProvider({ children }) {
 				syncLibrary,
 				isSyncingLibrary,
 				libraryVersion,
+				// Cheap signal for user-driven server state changes (e.g. a
+				// favorite toggle): pages depending on libraryVersion refetch.
+				bumpLibraryVersion: () => setLibraryVersion((version) => version + 1),
 				isOffline,
 				servers,
 				switchServer,

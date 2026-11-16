@@ -29,6 +29,7 @@ import {
 	setJellyfinFavorite,
 } from "../services/jellyfin";
 import { downloadTrackOffline, useDownloadedTracks } from "../services/offlineDownloads";
+import { invalidateJellyfinFavoriteEntries } from "../services/jellyfinCache";
 import PlaylistNameModal from "./modals/PlaylistNameModal";
 import TrackFileInfoModal from "./modals/TrackFileInfoModal";
 
@@ -120,7 +121,7 @@ export default function TrackOptionsMenu({
 	align = "right",
 	className = "",
 }) {
-	const { session } = useJellyfin();
+	const { session, bumpLibraryVersion } = useJellyfin();
 	const { playNow, playNext, playLast, addToQueue } = usePlayer();
 	const navigate = useNavigate();
 
@@ -245,6 +246,18 @@ export default function TrackOptionsMenu({
 				session.accessToken,
 				next,
 			);
+			// Keep the raw item (the menu's source of truth for favorite
+			// state) in sync so a re-render can't revert the optimistic flag.
+			if (track.raw?.UserData) {
+				track.raw.UserData.IsFavorite = next;
+			}
+			// The response cache holds stale favorite state: drop the cached
+			// favorites collection and this item's cached detail, then let
+			// open pages (e.g. the Favorites section) refetch fresh data.
+			await invalidateJellyfinFavoriteEntries(track.id);
+			bumpLibraryVersion();
+			// Success closes the menu; failures keep it open for a retry.
+			closeMenu();
 		} catch (error) {
 			setIsFavorite(!next);
 			toast.error(error?.message || "Could not update favorites");
@@ -456,7 +469,7 @@ export default function TrackOptionsMenu({
 							{isFavorite
 								? <IconHeartFilled size={14} className="text-red-500" />
 								: <IconHeart size={14} stroke={1.8} />}
-							{isFavorite ? "Remove Favorite" : "Favorite"}
+							{isFavorite ? "Remove Favorite" : "Add to Favorites"}
 						</button>
 
 						{/* Download / Downloaded (via the Rust download command) */}

@@ -727,7 +727,9 @@ export async function addToJellyfinPlaylist(serverUrl, playlistId, trackId, user
 
 export async function setJellyfinFavorite(serverUrl, userId, itemId, token, isFavorite) {
 	const base = cleanUrl(serverUrl);
-	const res = await fetch(`${base}/Users/${userId}/Favorites/${itemId}`, {
+	// Jellyfin marks/unmarks favorites on /FavoriteItems/{itemId}; the
+	// /Favorites path only lists favorites, so item-scoped calls would 404.
+	const res = await fetch(`${base}/Users/${userId}/FavoriteItems/${itemId}`, {
 		method: isFavorite ? "POST" : "DELETE",
 		headers: getAuthHeaders(token),
 	});
