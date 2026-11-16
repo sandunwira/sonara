@@ -97,7 +97,7 @@ const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlaying, ac
 				)}
 			</span>
 			<span className="text-right text-[11px] text-zinc-500">{formatDuration(track.duration)}</span>
-			<span className="flex justify-end">
+			<span className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
 				<button
 					type="button"
 					onClick={(event) => {
