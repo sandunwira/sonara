@@ -87,9 +87,13 @@ html {
 /* Long track tables: let the browser skip layout/paint for rows that are
    scrolled out of view. The intrinsic size mirrors a row's real height
    (36px artwork + 2×8px padding + 1px border), so the scrollbar stays
-   accurate before the row has rendered for the first time. */
+   accurate before the row has rendered for the first time.
+   NOTE: this intentionally only applies to `content-visibility`, not
+   `contain` — paint containment (which content-visibility applies to
+   rendered rows) would clip the per-row TrackOptionsMenu dropdown that
+   overflows the row's bounds. The list is rendered incrementally anyway,
+   so only the mounted chunks pay paint cost. */
 .track-row {
-	content-visibility: auto;
 	contain-intrinsic-size: auto 53px;
 }
 

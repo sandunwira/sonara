@@ -90,6 +90,27 @@ pub fn run() {
             );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "create_downloaded_tracks_storage",
+            sql: "CREATE TABLE IF NOT EXISTS downloaded_tracks (
+            server_url TEXT NOT NULL,
+            track_id TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            file_size INTEGER,
+            extension TEXT,
+            bitrate INTEGER,
+            title TEXT,
+            artist TEXT,
+            album TEXT,
+            duration INTEGER,
+            downloaded_at TEXT NOT NULL,
+            PRIMARY KEY (server_url, track_id)
+        );
+        CREATE INDEX IF NOT EXISTS downloaded_tracks_server_idx ON downloaded_tracks(server_url);",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -169,7 +190,7 @@ pub fn run() {
                 .add_migrations("sqlite:sonara_cache.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, download_track])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

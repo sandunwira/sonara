@@ -669,3 +669,88 @@ export function getRandomGenreColor(name) {
 	const index = Math.abs(hash) % GENRE_COLORS.length;
 	return GENRE_COLORS[index];
 }
+
+// --- Track options helpers (playlists, favorites, file info, downloads) ---
+// These calls bypass the response cache on purpose: they either mutate server
+// state (must reach Jellyfin immediately) or read media details
+// (`MediaSources`) that `trimForCache` strips when writing cache entries.
+
+export async function fetchJellyfinPlaylists(serverUrl, userId, token) {
+	const base = cleanUrl(serverUrl);
+	const params = new URLSearchParams({
+		IncludeItemTypes: "Playlist",
+		Recursive: "true",
+		SortBy: "SortName",
+		SortOrder: "Ascending",
+	});
+	const res = await fetch(`${base}/Users/${userId}/Items?${params}`, {
+		method: "GET",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to fetch playlists (${res.status})`);
+	}
+	const data = await res.json();
+	return (data.Items || [])
+		.filter((item) => !item.IsArchived)
+		.map((item) => ({ id: item.Id, name: item.Name || "Untitled Playlist" }));
+}
+
+// Creates the playlist on the Jellyfin side (with the track already inside
+// when one is given) so it shows up on every Jellyfin client, not just Sonara.
+export async function createJellyfinPlaylist(serverUrl, userId, token, name, trackId = null) {
+	const base = cleanUrl(serverUrl);
+	const params = new URLSearchParams({ Name: name, UserId: userId });
+	if (trackId) params.set("Ids", trackId);
+	const res = await fetch(`${base}/Playlists?${params}`, {
+		method: "POST",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to create playlist (${res.status})`);
+	}
+	const data = await res.json();
+	return { id: data.Id, name };
+}
+
+export async function addToJellyfinPlaylist(serverUrl, playlistId, trackId, userId, token) {
+	const base = cleanUrl(serverUrl);
+	const params = new URLSearchParams({ Ids: trackId, UserId: userId });
+	const res = await fetch(`${base}/Playlists/${playlistId}/Items?${params}`, {
+		method: "POST",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to update playlist (${res.status})`);
+	}
+}
+
+export async function setJellyfinFavorite(serverUrl, userId, itemId, token, isFavorite) {
+	const base = cleanUrl(serverUrl);
+	const res = await fetch(`${base}/Users/${userId}/Favorites/${itemId}`, {
+		method: isFavorite ? "POST" : "DELETE",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to ${isFavorite ? "add to" : "remove from"} favorites (${res.status})`);
+	}
+}
+
+// File info must use a plain fetch: the shared cache strips MediaSources /
+// MediaStreams when persisting responses, so a cached entry could never
+// answer this request.
+export async function fetchJellyfinFileInfo(serverUrl, itemId, userId, token) {
+	const base = cleanUrl(serverUrl);
+	const params = new URLSearchParams({
+		userId,
+		Fields: "Path,MediaSources,MediaStreams",
+	});
+	const res = await fetch(`${base}/Items/${itemId}?${params}`, {
+		method: "GET",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to fetch file info (${res.status})`);
+	}
+	return await res.json();
+}

@@ -18,6 +18,10 @@
 	"app": {
 		"security": {
 			"csp": null,
+			"assetProtocol": {
+				"enable": true,
+				"scope": ["$APPDATA/downloads/**"]
+			},
 			"capabilities": ["default", "desktop-capability"]
 		},
 		"windows": [

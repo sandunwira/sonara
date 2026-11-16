@@ -1,13 +1,16 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { IconChevronLeft, IconSearch, IconServer, IconDotsVertical } from "@tabler/icons-react";
+import { IconChevronLeft, IconSearch, IconServer } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicCollection, fetchMusicItem, getThumbnailUrl, getTrackAlbumLink } from "../services/jellyfin";
 import useGenrePlayback from "../hooks/useGenrePlayback";
 import GenrePlayButton from "../components/GenrePlayButton";
 import TrackPlayButton from "../components/TrackPlayButton";
+import TrackOptionsMenu from "../components/TrackOptionsMenu";
+import { useDownloadedTracks } from "../services/offlineDownloads";
 import Artwork from "../components/Artwork";
+import { IconCircleCheckFilled } from "@tabler/icons-react";
 
 function formatDuration(seconds) {
 	if (!seconds || !Number.isFinite(seconds)) return "";
@@ -27,21 +30,19 @@ const TRACK_ROW_CHUNK = 250;
 // Actions arrive through a ref so their identity stays stable while always
 // pointing at the latest handlers. The "track-row" class also lets the
 // browser skip layout/paint for rows scrolled out of view.
+// Clicking the row body does nothing — playback starts only from the play
+// button in the number column; the rest of the row holds navigation links
+// and the options dropdown.
 const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlaying, actionsRef }) {
+	const { session } = useJellyfin();
+	// Offline indicator: subscribed to the downloaded-tracks store so the
+	// check mark appears the moment a download finishes.
+	const downloadedTracks = useDownloadedTracks(session?.serverUrl);
+	const isDownloaded = downloadedTracks.has(track.id);
 	const albumLink = getTrackAlbumLink(track);
 	return (
 		<div
-			role="button"
-			tabIndex={0}
-			onClick={() => actionsRef.current.play(track)}
-			onKeyDown={(event) => {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault();
-					actionsRef.current.play(track);
-				}
-			}}
-			aria-label={`Play ${track.title || "track"}`}
-			className="track-row group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 focus:outline-none focus-visible:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
+			className="track-row group grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem] items-center gap-3 border-b border-[#1b1b22] px-3 py-2 text-left last:border-b-0 hover:bg-white/5 sm:grid-cols-[2rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_4rem]"
 		>
 			<TrackPlayButton
 				index={index}
@@ -97,18 +98,25 @@ const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlaying, ac
 				)}
 			</span>
 			<span className="text-right text-[11px] text-zinc-500">{formatDuration(track.duration)}</span>
-			<span className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-				<button
-					type="button"
-					onClick={(event) => {
-						event.stopPropagation();
-						// Handle more actions for the track (e.g., show a dropdown menu)
-					}}
-					aria-label="More actions"
-					className="text-zinc-400 hover:text-white p-0.5 cursor-pointer transition"
-				>
-					<IconDotsVertical size={14} stroke={1.5} />
-				</button>
+			<span className="flex flex-row items-center justify-end gap-2">
+				{isDownloaded && (
+					<IconCircleCheckFilled
+						size={16}
+						className="text-blue-500"
+						title="Saved for offline"
+					/>
+				)}
+				{/* Hover fade lives on the trigger only: the dropdown itself is a
+				    sibling of the fade wrapper, so it stays visible when the
+				    cursor moves off the row onto the overhanging menu. */}
+				<span className="relative">
+					<TrackOptionsMenu
+						track={track}
+						iconSize={14}
+						align="right"
+						className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200"
+					/>
+				</span>
 			</span>
 		</div>
 	);

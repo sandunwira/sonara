@@ -3,17 +3,15 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
 	IconChevronLeft,
 	IconDisc,
-	IconDots,
 	IconMusic,
 	IconPlayerPauseFilled,
 	IconPlayerPlayFilled,
-	IconPlayerTrackNext,
-	IconPlaylistAdd,
 	IconServer,
 } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicItem, getTrackAlbumLink } from "../services/jellyfin";
+import TrackOptionsMenu from "../components/TrackOptionsMenu";
 
 function formatDuration(seconds) {
 	if (!seconds || !Number.isFinite(seconds)) return "";
@@ -35,14 +33,13 @@ export default function TrackDetailPage() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const { session, isAuthenticated, openServerModal, libraryVersion } = useJellyfin();
-	const { currentTrack, isPlaying, playTrack, togglePlay, playNext, playLast } = usePlayer();
+	const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
 
 	// The queue/track list can pass the track object along for an instant
 	// render; it is replaced by the fresh fetch right after.
 	const [track, setTrack] = useState(location.state?.track || null);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState("");
-	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	const [isScrolled, setIsScrolled] = useState(false);
 	// The title fades into the sticky bar once the hero's own title has scrolled out of view.
 	const [showHeaderTitle, setShowHeaderTitle] = useState(false);
@@ -249,51 +246,9 @@ export default function TrackDetailPage() {
 								? <IconPlayerPauseFilled size={20} />
 								: <IconPlayerPlayFilled size={20} />}
 						</button>
-						<div className="relative">
-							<button
-								type="button"
-								onClick={() => setIsMenuOpen((open) => !open)}
-								title="More actions"
-								aria-label="More actions"
-								className="p-1 text-zinc-400 transition hover:text-white"
-							>
-								<IconDots size={20} />
-							</button>
-							{isMenuOpen && (
-								<>
-									<div
-										className="fixed inset-0 z-40"
-										onClick={() => setIsMenuOpen(false)}
-									/>
-									<div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-xs border border-[#2b2b36] bg-[#18181f] py-1 shadow-xl">
-										<button
-											type="button"
-											onClick={() => {
-												playNext(track);
-												setIsMenuOpen(false);
-											}}
-											title="Play next"
-											className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white"
-										>
-											<IconPlayerTrackNext size={14} stroke={1.8} />
-											Play Next
-										</button>
-										<button
-											type="button"
-											onClick={() => {
-												playLast(track);
-												setIsMenuOpen(false);
-											}}
-											title="Add to queue"
-											className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white"
-										>
-											<IconPlaylistAdd size={14} stroke={1.8} />
-											Add to Queue
-										</button>
-									</div>
-								</>
-							)}
-						</div>
+						{/* Track options: full dropdown (play variants, queue, playlists,
+						    favorite, download, navigation, file info). */}
+						<TrackOptionsMenu track={track} iconSize={20} align="left" />
 					</div>
 
 					{/* Metadata */}

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import toast from "react-hot-toast";
 import { useJellyfin } from "./JellyfinContext";
-import { isTauri } from "@tauri-apps/api/core";
+import { isTauri, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { update as updateThumbarButton } from "tauri-plugin-thumbar";
 import { getAudioStreamUrl, getImageUrl } from "../services/jellyfin";
@@ -11,6 +11,7 @@ import {
 	saveStoredPlayerQueueState,
 	recordAppLog,
 } from "../services/jellyfinCache";
+import { ensureDownloadedTracksLoaded, peekDownloadedTrack } from "../services/offlineDownloads";
 
 const PlayerContext = createContext();
 
@@ -106,12 +107,36 @@ export function PlayerProvider({ children }) {
 	const nextTrackRef = useRef(null);
 	const lastAudibleVolumeRef = useRef(85);
 	const mediaPositionRef = useRef(-1);
+	// True while the audio element plays a locally downloaded file instead of
+	// the Jellyfin stream (used to skip offline playback reporting).
+	const localPlaybackRef = useRef(false);
+	const sessionRef = useRef(session);
 
 	currentTrackRef.current = currentTrack;
 	queueRef.current = queue;
 	queueIndexRef.current = queueIndex;
 	isRepeatRef.current = repeatMode;
 	isShuffleRef.current = isShuffle;
+	sessionRef.current = session;
+
+	// Downloaded-track records are loaded once per server so startTrack can
+	// resolve a local file synchronously (no SQLite round-trip per track).
+	useEffect(() => {
+		if (session?.serverUrl) {
+			ensureDownloadedTracksLoaded(session.serverUrl).catch(() => {});
+		}
+	}, [session?.serverUrl]);
+
+	// Picks where a track plays from: the downloaded local file when one is
+	// recorded for this server, otherwise the Jellyfin stream.
+	const resolvePlaybackSource = (track) => {
+		const serverUrl = sessionRef.current?.serverUrl;
+		const downloaded = serverUrl ? peekDownloadedTrack(serverUrl, track?.id) : null;
+		if (downloaded?.filePath) {
+			return { src: convertFileSrc(downloaded.filePath), isLocal: true };
+		}
+		return { src: track?.streamUrl || "", isLocal: false };
+	};
 
 	// Fisher–Yates shuffle returning a new array.
 	const shuffleArray = (array) => {
@@ -244,6 +269,9 @@ export function PlayerProvider({ children }) {
 
 	const reportPlayback = (event, track, isPaused = false) => {
 		if (!track?.isJellyfin) return Promise.resolve(false);
+		// Playing a locally downloaded file while offline has no server
+		// session to report to; skip instead of failing with a toast.
+		if (localPlaybackRef.current && !navigator.onLine) return Promise.resolve(false);
 		const reporter = playbackReporterRef.current?.reportPlaybackEvent;
 		if (!reporter) return Promise.resolve(false);
 		return reporter(event, track.id, getPlaybackState(isPaused)).then((reported) => {
@@ -432,11 +460,13 @@ export function PlayerProvider({ children }) {
 		mediaPositionRef.current = -1;
 
 		if (audioRef.current) {
-			if (track.streamUrl) {
+			const source = resolvePlaybackSource(track);
+			if (source.src) {
 				stopPlaybackReporting();
 				audioRef.current.volume = volume / 100;
 				audioRef.current.muted = isMuted || volume === 0;
-				audioRef.current.src = track.streamUrl;
+				audioRef.current.src = source.src;
+				localPlaybackRef.current = source.isLocal;
 				audioRef.current
 					.play()
 					.then(() => {
@@ -542,6 +572,29 @@ export function PlayerProvider({ children }) {
 		updateQueue(nextQueue, activeIndex);
 	};
 
+	// Appends a track to the very end of the queue without interrupting
+	// playback. If an unplayed copy already sits ahead of the current
+	// position, nothing is added (it would just be a duplicate the listener
+	// still gets to) and an informational toast says so instead.
+	const addToQueue = (track) => {
+		if (!track) return;
+		if (!currentTrackRef.current) {
+			updateQueue([track], -1);
+			toast.success(`Added "${track.title}" to the queue`);
+			return;
+		}
+		const activeIndex = queueIndexRef.current;
+		const duplicateAhead = queueRef.current
+			.slice(activeIndex + 1)
+			.some((queuedTrack) => queuedTrack.id === track.id);
+		if (duplicateAhead) {
+			toast(`"${track.title}" is already queued up`);
+			return;
+		}
+		updateQueue([...queueRef.current, track], activeIndex);
+		toast.success(`Added "${track.title}" to the queue`);
+	};
+
 	const removeQueuedTrack = (index) => {
 		if (index <= queueIndexRef.current || index >= queueRef.current.length) return;
 		const nextQueue = [...queueRef.current];
@@ -582,8 +635,12 @@ export function PlayerProvider({ children }) {
 				audioRef.current.pause();
 				setIsPlaying(false);
 			} else {
-				if (!audioRef.current.src && currentTrack?.streamUrl) {
-					audioRef.current.src = currentTrack.streamUrl;
+				if (!audioRef.current.src && currentTrack) {
+					const source = resolvePlaybackSource(currentTrack);
+					if (source.src) {
+						audioRef.current.src = source.src;
+						localPlaybackRef.current = source.isLocal;
+					}
 				}
 				if (audioRef.current.src) {
 					audioRef.current.volume = volume / 100;
@@ -698,8 +755,12 @@ export function PlayerProvider({ children }) {
 
 		const resumePlayback = () => {
 			if (!audio) return;
-			if (!audio.src && currentTrackRef.current?.streamUrl) {
-				audio.src = currentTrackRef.current.streamUrl;
+			if (!audio.src && currentTrackRef.current) {
+				const source = resolvePlaybackSource(currentTrackRef.current);
+				if (source.src) {
+					audio.src = source.src;
+					localPlaybackRef.current = source.isLocal;
+				}
 			}
 			if (audio.src) audio.play().catch(() => { });
 		};
@@ -888,6 +949,7 @@ export function PlayerProvider({ children }) {
 				playNow,
 				playNext,
 				playLast,
+				addToQueue,
 				removeQueuedTrack,
 				moveQueuedTrack,
 				clearQueue,
@@ -927,6 +989,7 @@ export function usePlayer() {
 			playNow: () => { },
 			playNext: () => { },
 			playLast: () => { },
+			addToQueue: () => { },
 			removeQueuedTrack: () => { },
 			moveQueuedTrack: () => { },
 			clearQueue: () => { },

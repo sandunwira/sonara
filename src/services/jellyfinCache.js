@@ -5,7 +5,8 @@ const DATABASE_URL = "sqlite:sonara_cache.db";
 
 let databasePromise;
 
-async function getDatabase() {
+// Shared by this module and the offline downloads service (same database).
+export async function getDatabase() {
 	if (!isTauri()) return null;
 	if (!databasePromise) {
 		databasePromise = Database.load(DATABASE_URL)
