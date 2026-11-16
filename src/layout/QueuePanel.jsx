@@ -85,7 +85,7 @@ function Lyrics({ track, onSeek }) {
 						onWheel={() => {
 							userScrollUntilRef.current = Date.now() + 4000;
 						}}
-						className="relative max-h-36 overflow-y-auto pr-1 p-3 leading-loose rounded-xs bg-[#101014] border border-zinc-900"
+						className="relative max-h-36 overflow-y-auto overscroll-none pr-1 p-3 leading-loose rounded-xs bg-[#101014] border border-zinc-900"
 					>
 						{lyrics.synced.map((line, index) => (
 							line.text ? (
@@ -187,7 +187,7 @@ function QueuePanel({ isOpen, onClose }) {
 						</div>
 					</header>
 
-					<div className="flex-1 overflow-y-auto space-y-8 px-4 pb-4">
+					<div className="flex-1 overflow-y-auto overscroll-none space-y-8 px-4 pb-4">
 						{/* Now playing preview */}
 						<div className="space-y-2">
 							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">

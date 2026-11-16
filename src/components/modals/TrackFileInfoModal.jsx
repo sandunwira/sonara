@@ -126,7 +126,7 @@ export default function TrackFileInfoModal({ track, onClose }) {
 						{error}
 					</div>
 				) : (
-					<div className="mt-4 max-h-80 overflow-y-auto rounded-xs border border-[#22222a] bg-[#101014]">
+					<div className="mt-4 max-h-80 overflow-y-auto overscroll-none rounded-xs border border-[#22222a] bg-[#101014]">
 						{rows.map(([label, value], index) => (
 							<div
 								key={label}

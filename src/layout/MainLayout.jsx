@@ -15,7 +15,7 @@ export default function MainLayout() {
 				<Sidebar />
 
 				{/* Scrollable Page Content */}
-				<main className="flex-1 overflow-y-auto bg-[#0a0a0d] p-7 pt-0">
+				<main className="flex-1 overflow-y-auto overscroll-none bg-[#0a0a0d] p-7 pt-0">
 					<Outlet context={{ isQueuePanelOpen }} />
 				</main>
 
