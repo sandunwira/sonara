@@ -229,7 +229,7 @@ export default function ArtistDetailPage() {
 								style={{ backgroundImage: `linear-gradient(#0a0a0d00, #0a0a0da0, #0a0a0dff), url(${artist.cover})`, backgroundSize: "cover", backgroundPosition: "center" }}
 							>
 								<div className="p-7 pb-6">
-									<h1 className="wrap-break-word text-4xl font-extrabold leading-none tracking-tighter text-white sm:text-6xl">
+									<h1 className="font-display wrap-break-word text-4xl font-extrabold leading-none tracking-tighter text-white sm:text-6xl">
 										{artistName || artist?.title || "Artist"}
 									</h1>
 									<p className="mt-1 text-xs text-zinc-300">
@@ -340,7 +340,7 @@ export default function ArtistDetailPage() {
 						</button>
 
 						<div className="absolute inset-x-0 bottom-0 z-10 p-7 pb-6">
-							<h1 className="wrap-break-word text-4xl font-extrabold leading-none tracking-tighter text-white sm:text-6xl">
+							<h1 className="font-display wrap-break-word text-4xl font-extrabold leading-none tracking-tighter text-white sm:text-6xl">
 								{artistName || artist?.title || "Artist"}
 							</h1>
 							<p className="mt-1 text-xs text-zinc-300">

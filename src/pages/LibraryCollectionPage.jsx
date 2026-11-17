@@ -295,7 +295,7 @@ export default function LibraryCollectionPage({
 					<div className="flex items-center gap-2">
 						<div className="flex items-center gap-2">
 							<Icon size={19} stroke={1.7} />
-							<h1 className="text-xl font-bold tracking-tight text-white">{pageTitle}</h1>
+							<h1 className="font-display text-xl font-bold tracking-tight text-white">{pageTitle}</h1>
 						</div>
 						{!isLoading && !isSelectionPending && !error && (
 							<span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400">

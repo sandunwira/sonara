@@ -171,7 +171,7 @@ function QueuePanel({ isOpen, onClose }) {
 				<div className="flex h-full w-72 flex-col bg-[#0d0d10] text-zinc-200">
 					{/* Panel header */}
 					<header className="flex shrink-0 items-center justify-between px-4 py-3">
-						<h2 className="text-sm font-semibold text-white">Queue</h2>
+						<h2 className="font-display text-base font-semibold text-white">Queue</h2>
 						<div className="flex items-center gap-2">
 							<p className="text-[10px] font-semibold text-zinc-400">
 								{queueIndex + 1}/{queue.length}

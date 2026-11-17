@@ -25,7 +25,7 @@ function GenresGrid({
 	return (
 		<section>
 			<div className="mb-3 flex items-center justify-between">
-				<h2 className="text-base font-semibold tracking-tight text-white">
+				<h2 className="font-display text-base font-semibold tracking-tight text-white">
 					Genres
 				</h2>
 				<button

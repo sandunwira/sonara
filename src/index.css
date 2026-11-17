@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* Headline font: usable as the `font-display` utility (Tailwind v4 turns
+   --font-display tokens into that class). Oswald is a variable font
+   (200..700), so font-semibold/bold classes on headlines use real weights. */
+@theme {
+	--font-display: "Oswald", sans-serif;
+}
+
+/* Headlines set in League Gothic render uppercase; keeping the transform on
+   the utility class means every headline gets it without per-element edits. */
+.font-display {
+	text-transform: uppercase;
+}
+
 @font-face {
 	font-family: 'Manrope';
 	src: url('/fonts/Manrope.ttf') format('truetype');

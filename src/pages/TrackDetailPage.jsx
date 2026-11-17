@@ -191,7 +191,7 @@ export default function TrackDetailPage() {
 								style={{ backgroundImage: `linear-gradient(#0a0a0d00, #0a0a0da0, #0a0a0dff), url(${track.cover})`, backgroundSize: "cover", backgroundPosition: "center" }}
 							>
 								<div className="p-7 pb-6">
-									<h1 className="wrap-break-word text-4xl font-extrabold leading-none tracking-tighter text-white sm:text-6xl">
+									<h1 className="font-display wrap-break-word text-4xl font-extrabold leading-none tracking-tighter text-white sm:text-6xl">
 										{track.title || "Track"}
 									</h1>
 									<p className="mt-2 truncate text-xs text-zinc-300">
