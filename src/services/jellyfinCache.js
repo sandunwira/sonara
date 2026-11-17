@@ -323,6 +323,20 @@ async function requestJellyfinJson(url, headers, database) {
 	return { ok: false, status: response.status, statusText: response.statusText, data: null };
 }
 
+// Mutating playlist membership (add track / create playlist) changes server
+// state the response cache cannot know about: drop every cached entry keyed
+// by the playlist id so its items query and detail refetch fresh data.
+export async function invalidateJellyfinPlaylistEntries(playlistId) {
+	const database = await getDatabase();
+	if (!database || !playlistId) return;
+
+	const result = await database.execute(
+		"DELETE FROM jellyfin_responses WHERE cache_key LIKE $1",
+		[`%${playlistId}%`],
+	);
+	if ((result?.rowsAffected ?? 0) > 0) invalidateCachedJellyfinItems();
+}
+
 // Favorites are user-mutable server state the response cache cannot know
 // about: after a favorite toggle, drop every cached entry that carries
 // favorite state — the IsFavorite-filtered collection responses and any

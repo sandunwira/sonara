@@ -670,6 +670,41 @@ export function getRandomGenreColor(name) {
 	return GENRE_COLORS[index];
 }
 
+// Renames any Jellyfin item (used for playlists): item updates are a full
+// POST of the item's metadata with the changed Name.
+export async function renameJellyfinItem(serverUrl, userId, itemId, token, name) {
+	const base = cleanUrl(serverUrl);
+	const res = await fetch(`${base}/Users/${userId}/Items/${itemId}`, {
+		method: "GET",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to fetch item details (${res.status})`);
+	}
+	const item = await res.json();
+	const update = await fetch(`${base}/Items/${itemId}`, {
+		method: "POST",
+		headers: { ...getAuthHeaders(token), "Content-Type": "application/json" },
+		body: JSON.stringify({ ...item, Name: name }),
+	});
+	if (!update.ok) {
+		throw new Error(`Failed to rename (${update.status})`);
+	}
+}
+
+// Deletes any Jellyfin item (used for playlists). Requires an account with
+// deletion permission.
+export async function deleteJellyfinItem(serverUrl, itemId, token) {
+	const base = cleanUrl(serverUrl);
+	const res = await fetch(`${base}/Items/${itemId}`, {
+		method: "DELETE",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to delete (${res.status})`);
+	}
+}
+
 // --- Track options helpers (playlists, favorites, file info, downloads) ---
 // These calls bypass the response cache on purpose: they either mutate server
 // state (must reach Jellyfin immediately) or read media details
@@ -694,6 +729,23 @@ export async function fetchJellyfinPlaylists(serverUrl, userId, token) {
 	return (data.Items || [])
 		.filter((item) => !item.IsArchived)
 		.map((item) => ({ id: item.Id, name: item.Name || "Untitled Playlist" }));
+}
+
+// Ids of the tracks inside a playlist, used to detect duplicates before
+// adding. Bypasses the response cache on purpose: a membership check right
+// after an add (or in the same session) must see fresh data.
+export async function fetchJellyfinPlaylistItemIds(serverUrl, playlistId, userId, token) {
+	const base = cleanUrl(serverUrl);
+	const params = new URLSearchParams({ UserId: userId });
+	const res = await fetch(`${base}/Playlists/${playlistId}/Items?${params}`, {
+		method: "GET",
+		headers: getAuthHeaders(token),
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to fetch playlist items (${res.status})`);
+	}
+	const data = await res.json();
+	return new Set((data.Items || []).map((item) => item.Id));
 }
 
 // Creates the playlist on the Jellyfin side (with the track already inside

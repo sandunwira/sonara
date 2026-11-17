@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
 	IconChevronDown,
 	IconHome,
@@ -10,18 +11,45 @@ import {
 	IconTag,
 	IconFolder,
 	IconPlus,
-	IconList,
-	IconServer,
-	IconRefresh,
+	IconPlaylist,
 } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
+import { createJellyfinPlaylist, fetchJellyfinPlaylists } from "../services/jellyfin";
+import PlaylistNameModal from "./modals/PlaylistNameModal";
+import PlaylistOptionsMenu from "./PlaylistOptionsMenu";
 import ServerDropdown from "./ServerDropdown";
 
 function Sidebar() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const [libraryOpen, setLibraryOpen] = useState(true);
-	const { isAuthenticated, session, openServerModal, syncLibrary, isSyncingLibrary, isOffline } = useJellyfin();
+	const [playlistsOpen, setPlaylistsOpen] = useState(true);
+	const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+	// Real playlists come from Jellyfin (created/stored server-side). The
+	// list refetches on connect, after a manual library sync (libraryVersion
+	// bump) and right after a playlist is created below.
+	const [playlists, setPlaylists] = useState([]);
+	const { isAuthenticated, session, openServerModal, syncLibrary, isSyncingLibrary, isOffline, bumpLibraryVersion } = useJellyfin();
+
+	useEffect(() => {
+		if (!isAuthenticated || !session) {
+			setPlaylists([]);
+			return undefined;
+		}
+		let cancelled = false;
+		fetchJellyfinPlaylists(session.serverUrl, session.userId, session.accessToken)
+			.then((data) => {
+				if (!cancelled) setPlaylists(data);
+			})
+			.catch(() => {
+				// A failed sidebar refresh just keeps the current list; the
+				// toast/inline errors live on the pages that need them.
+				if (!cancelled) setPlaylists([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [isAuthenticated, session, bumpLibraryVersion]);
 
 	const navItems = [
 		{ id: "home", label: "Home", icon: IconHome, path: "/" },
@@ -75,8 +103,8 @@ function Sidebar() {
 										type="button"
 										onClick={() => handleNavClick(item.path)}
 										className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
-												? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
-												: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
+											? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
+											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
 											}`}
 									>
 										<Icon
@@ -96,29 +124,108 @@ function Sidebar() {
 					)}
 				</div>
 
-				{/* Playlists Section */}
+				{/* Playlists group */}
 				<div>
-					<div className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400">
+					<button
+						type="button"
+						onClick={() => setPlaylistsOpen(!playlistsOpen)}
+						className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
+					>
 						<span>Playlists</span>
-						<div className="flex items-center gap-1">
-							<button
-								type="button"
-								aria-label="Add Playlist"
-								className="rounded-xs p-0.5 text-zinc-400 hover:bg-[#1a1a22] hover:text-zinc-200"
+						<div className="flex items-center gap-2">
+							{/* Clickable span (not a nested button) that stops
+								propagation so the create-playlist modal opens
+								without toggling the collapsible. */}
+							<span
+								role="button"
+								tabIndex={0}
+								aria-label="Create playlist"
+								onClick={(event) => {
+									event.stopPropagation();
+									if (!session) {
+										toast.error("Connect to a server first");
+										return;
+									}
+									setIsCreatePlaylistOpen(true);
+								}}
+								onKeyDown={(event) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										event.stopPropagation();
+										if (session) setIsCreatePlaylistOpen(true);
+									}
+								}}
+								className="cursor-pointer rounded-xs text-zinc-400 hover:text-zinc-200 focus:outline-none focus-visible:text-zinc-200"
 							>
-								<IconPlus size={13} stroke={2} />
-							</button>
-							<button
-								type="button"
-								aria-label="Playlist Options"
-								className="rounded-xs p-0.5 text-zinc-400 hover:bg-[#1a1a22] hover:text-zinc-200"
-							>
-								<IconList size={13} stroke={2} />
-							</button>
+								<IconPlus size={13} />
+							</span>
+							<IconChevronDown
+								size={13}
+								className={`transition-transform duration-200 ${playlistsOpen ? "-rotate-180" : "rotate-0"
+									}`}
+							/>
 						</div>
-					</div>
+					</button>
+
+					{playlistsOpen && (
+						<nav className="mt-1 flex flex-col space-y-0.5">
+							{playlists.map((playlist) => {
+								const path = `/playlists/${playlist.id}`;
+								const isActive =
+									location.pathname === path ||
+									location.pathname.startsWith(`${path}/`);
+								return (
+									<button
+										key={playlist.id}
+										type="button"
+										onClick={() => handleNavClick(path)}
+										className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
+											? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
+											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
+											}`}
+									>
+										<div className="flex flex-row items-center flex-1 gap-2.5">
+											<IconPlaylist
+												size={14}
+												stroke={1.8}
+												className={
+													isActive
+														? "text-blue-500"
+														: "text-zinc-400 group-hover:text-zinc-200"
+												}
+											/>
+											<span className="block truncate">{playlist.name}</span>
+										</div>
+										<PlaylistOptionsMenu playlist={playlist} />
+									</button>
+								);
+							})}
+						</nav>
+					)}
 				</div>
 			</div>
+
+			{/* Create-playlist modal (opened from the Playlists header plus
+				icon); stored server-side like every other Jellyfin playlist. */}
+			{isCreatePlaylistOpen && (
+				<PlaylistNameModal
+					title="New Playlist"
+					submitLabel="Create"
+					onClose={() => setIsCreatePlaylistOpen(false)}
+					onSubmit={async (name) => {
+						await createJellyfinPlaylist(
+							session.serverUrl,
+							session.userId,
+							session.accessToken,
+							name,
+						);
+						// The playlist fetch effect listens for libraryVersion,
+						// so bumping it refetches the sidebar list immediately.
+						bumpLibraryVersion();
+						toast.success(`Playlist "${name}" created`);
+					}}
+				/>
+			)}
 		</aside>
 	);
 }

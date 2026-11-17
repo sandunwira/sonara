@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { IconChevronLeft, IconSearch, IconServer } from "@tabler/icons-react";
+import { IconSearch, IconServer } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicCollection, fetchMusicItem, getThumbnailUrl, getTrackAlbumLink } from "../services/jellyfin";
@@ -132,6 +132,10 @@ export default function LibraryCollectionPage({
 	entityList = false,
 	isFolderList = false,
 	genreCards = false,
+	// Empty-state copy for a detail view (e.g. "This playlist is empty"),
+	// shown instead of the collection-level "No {title} found" message.
+	detailEmptyTitle,
+	detailEmptySubtitle,
 }) {
 	const location = useLocation();
 	const navigate = useNavigate();
@@ -288,16 +292,6 @@ export default function LibraryCollectionPage({
 		<div className="flex flex-col">
 			<header className="sticky top-0 z-30 flex flex-col gap-4 bg-[#0a0a0d] sm:flex-row sm:items-center sm:justify-between py-7">
 				<div className="flex items-center">
-					{detailId && (
-						<button
-							type="button"
-							onClick={() => navigate(detailPath)}
-							aria-label={`Back to ${title}`}
-							className="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white cursor-pointer"
-						>
-							<IconChevronLeft size={16} />
-						</button>
-					)}
 					<div className="flex items-center gap-2">
 						<div className="flex items-center gap-2">
 							<Icon size={19} stroke={1.7} />
@@ -350,10 +344,18 @@ export default function LibraryCollectionPage({
 				<div className="py-16 text-center">
 					<Icon size={30} className="mx-auto mb-2 text-zinc-600" />
 					<p className="text-sm font-medium text-zinc-400">
-						{search ? "No matching items" : `No ${title.toLowerCase()} found`}
+						{search
+							? "No matching items"
+							: detailId && detailEmptyTitle
+								? detailEmptyTitle
+								: `No ${title.toLowerCase()} found`}
 					</p>
 					<p className="mt-1 text-xs text-zinc-600">
-						{search ? "Try a different search." : "This library does not contain any items yet."}
+						{search
+							? "Try a different search."
+							: detailId && detailEmptySubtitle
+								? detailEmptySubtitle
+								: "This library does not contain any items yet."}
 					</p>
 				</div>
 			) : entityList && !detailId ? (

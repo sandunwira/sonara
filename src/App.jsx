@@ -21,6 +21,7 @@ import ArtistDetailPage from "./pages/ArtistDetailPage";
 import ArtistsPage from "./pages/Artists";
 import GenresPage from "./pages/Genres";
 import FoldersPage from "./pages/Folders";
+import PlaylistDetailPage from "./pages/PlaylistDetailPage";
 
 function AppRoutes() {
 	return (
@@ -49,6 +50,7 @@ function AppRoutes() {
 									<Route path="/genres/:genreId" element={<GenresPage />} />
 									<Route path="/folders" element={<FoldersPage />} />
 									<Route path="/folders/:libraryId" element={<FoldersPage />} />
+									<Route path="/playlists/:playlistId" element={<PlaylistDetailPage />} />
 									<Route path="*" element={<Navigate to="/" replace />} />
 								</Route>
 							</Routes>

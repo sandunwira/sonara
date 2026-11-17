@@ -16,6 +16,7 @@ import {
 	IconPlayerPlayFilled,
 	IconPlayerTrackNext,
 	IconPlaylistAdd,
+	IconPlaylist,
 	IconPlus,
 } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
@@ -23,11 +24,15 @@ import { usePlayer } from "../context/PlayerContext";
 import {
 	addToJellyfinPlaylist,
 	createJellyfinPlaylist,
+	fetchJellyfinPlaylistItemIds,
 	fetchJellyfinPlaylists,
 	getTrackAlbumLink,
 	getTrackArtistLink,
 } from "../services/jellyfin";
 import { downloadTrackOffline, useDownloadedTracks } from "../services/offlineDownloads";
+import {
+	invalidateJellyfinPlaylistEntries,
+} from "../services/jellyfinCache";
 import useFavoriteToggle from "../hooks/useFavoriteToggle";
 import PlaylistNameModal from "./modals/PlaylistNameModal";
 import TrackFileInfoModal from "./modals/TrackFileInfoModal";
@@ -120,7 +125,7 @@ export default function TrackOptionsMenu({
 	align = "right",
 	className = "",
 }) {
-	const { session } = useJellyfin();
+	const { session, bumpLibraryVersion } = useJellyfin();
 	const { playNow, playNext, playLast, addToQueue } = usePlayer();
 	const navigate = useNavigate();
 
@@ -233,9 +238,41 @@ export default function TrackOptionsMenu({
 	// artist (id === null) has no page to navigate to.
 	const canOpenArtist = Boolean(artistLink && /^[0-9a-f]{32}$/i.test(artistLink.id || ""));
 
-	const handleAddToPlaylist = (playlist) => {
+	const handleAddToPlaylist = async (playlist) => {
+		// Jellyfin accepts duplicate adds silently (204 every time), so
+		// membership is checked before posting: adding the same track to
+		// the same playlist shows an info toast instead of a phantom
+		// "Added" confirmation.
+		try {
+			const existingIds = await fetchJellyfinPlaylistItemIds(
+				session.serverUrl,
+				playlist.id,
+				session.userId,
+				session.accessToken,
+			);
+			if (existingIds.has(track.id)) {
+				toast(`"${track.title}" is already in "${playlist.name}" playlist`);
+				return;
+			}
+		} catch {
+			// Membership check failed (e.g. offline) — attempt the add
+			// anyway and let its own error handling report a failure.
+		}
 		toast.promise(
-			addToJellyfinPlaylist(session.serverUrl, playlist.id, track.id, session.userId, session.accessToken),
+			// After the server confirms the add, drop the playlist's cached
+			// items/detail responses (they still show the old contents) and
+			// let open pages — the sidebar's playlist view, the playlist
+			// detail page — refetch fresh data.
+			addToJellyfinPlaylist(
+				session.serverUrl,
+				playlist.id,
+				track.id,
+				session.userId,
+				session.accessToken,
+			).then(async () => {
+				await invalidateJellyfinPlaylistEntries(playlist.id);
+				bumpLibraryVersion();
+			}),
 			{
 				loading: `Adding to "${playlist.name}"…`,
 				success: `Added to "${playlist.name}"`,
@@ -246,6 +283,9 @@ export default function TrackOptionsMenu({
 
 	const handleCreatePlaylist = async (name) => {
 		await createJellyfinPlaylist(session.serverUrl, session.userId, session.accessToken, name, track.id);
+		// The playlist fetch effect listens for libraryVersion, so bumping
+		// it refetches the sidebar list immediately.
+		bumpLibraryVersion();
 		toast.success(`Created playlist "${name}"`);
 	};
 
@@ -406,7 +446,7 @@ export default function TrackOptionsMenu({
 								onClick={() => setOpenSubmenu((current) => (current === "playlist" ? null : "playlist"))}
 								className={itemClass}
 							>
-								<IconPlus size={14} stroke={1.8} />
+								<IconPlaylist size={14} stroke={1.8} />
 								<span className="flex-1">Add to Playlist</span>
 								<IconChevronRight size={12} stroke={2} className="text-zinc-500" />
 							</button>
