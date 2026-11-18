@@ -150,23 +150,25 @@ export default function PlaylistOptionsMenu({ playlist }) {
 		return (
 			<>
 				{trigger}
-				{renameOpen && (
+				{renameOpen && createPortal(
 					<PlaylistNameModal
 						title="Rename Playlist"
 						submitLabel="Rename"
 						initialName={playlist.name}
 						onSubmit={handleRename}
 						onClose={() => setRenameOpen(false)}
-					/>
+					/>,
+					document.body,
 				)}
-				{deleteOpen && (
+				{deleteOpen && createPortal(
 					<ConfirmModal
 						title="Delete Playlist"
 						message={`Delete "${playlist.name}"? This removes the playlist from your Jellyfin server for every device. Your tracks are not deleted.`}
 						confirmLabel="Delete"
 						onConfirm={handleDelete}
 						onClose={() => setDeleteOpen(false)}
-					/>
+					/>,
+					document.body,
 				)}
 			</>
 		);
