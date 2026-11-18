@@ -329,12 +329,12 @@ export default function LibraryCollectionPage({
 									onClick={handlePlayAll}
 									aria-label={isCollectionActive && isPlayerPlaying ? `Pause ${pageTitle}` : `Play ${pageTitle}`}
 									title={isCollectionActive && isPlayerPlaying ? `Pause ${pageTitle}` : `Play ${pageTitle}`}
-									className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500"
+									className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500 cursor-pointer"
 								>
 									{isCollectionActive && isPlayerPlaying ? (
 										<IconPlayerPauseFilled size={12} />
 									) : (
-										<IconPlayerPlayFilled size={12} className="ml-0.5" />
+										<IconPlayerPlayFilled size={12} />
 									)}
 								</button>
 							)}
