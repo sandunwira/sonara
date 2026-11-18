@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
 	IconAntennaBars5,
 	IconChevronDown,
-	IconDots,
-	IconPencil,
+	IconDotsVertical,
+	IconEdit,
 	IconPlus,
 	IconServer,
 	IconTrash,
@@ -18,8 +19,13 @@ const CONNECTION_STATUS_META = {
 	checking: { label: "Checking connection", className: "text-zinc-500" },
 };
 
-// Small signal indicator, shown on the active server row. Colors track the
-// connection state: green healthy, amber weak, gray offline.
+// Menu styling mirrors PlaylistOptionsMenu so both sidebar sections look and behave identically (fixed placement next to the trigger, portal, and close on Escape / scroll / resize / click-away).
+const MENU_WIDTH = "w-44";
+const MENU_ESTIMATED_HEIGHT = 90;
+
+const itemClass = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white cursor-pointer";
+
+// Small signal indicator, shown on the active server row. Colors track the connection state: green healthy, amber weak, gray offline.
 function ConnectionStatusIcon() {
 	const { connectionStatus } = useJellyfin();
 
@@ -36,69 +42,89 @@ function ConnectionStatusIcon() {
 	);
 }
 
-// A collapsible header row and nav-style entries (active = blue/semibold,
-// hover = #1a1a22). The active server row shows the connection status icon.
+// Collapsible header row and nav-style entries styled like the sidebar's Playlists section: same hover colors, same plus-in-header shortcut and the same per-row ⋮ options menu (portal + placement + scroll-close).
 function ServerDropdown() {
 	const { isAuthenticated, session, servers, switchServer, removeServer, openServerModal, openEditServerModal } = useJellyfin();
 	const [isOpen, setIsOpen] = useState(false);
-	const [menuOpenFor, setMenuOpenFor] = useState(null);
+	// Which server's action menu is open + its fixed placement, captured once at open time from the trigger's rect.
+	const [rowMenu, setRowMenu] = useState({ serverUrl: null, style: null });
 	const containerRef = useRef(null);
-	const rowMenuRef = useRef(null);
+
+	const closeRowMenu = useCallback(() => setRowMenu({ serverUrl: null, style: null }), []);
 
 	useEffect(() => {
 		if (!isOpen) return undefined;
 		const handlePointerDown = (event) => {
 			if (containerRef.current && !containerRef.current.contains(event.target)) {
 				setIsOpen(false);
-				setMenuOpenFor(null);
+				closeRowMenu();
 			}
 		};
 		document.addEventListener("mousedown", handlePointerDown);
 		return () => document.removeEventListener("mousedown", handlePointerDown);
-	}, [isOpen]);
+	}, [isOpen, closeRowMenu]);
 
-	// Close the per-row menu on any outside click or Escape.
+	// The portal-rendered row menu floats free of the sidebar: close on any scroll or resize so it never detaches from its trigger.
 	useEffect(() => {
-		if (!menuOpenFor) return undefined;
-		const handlePointerDown = (event) => {
-			if (rowMenuRef.current && !rowMenuRef.current.contains(event.target)) {
-				setMenuOpenFor(null);
-			}
+		if (!rowMenu.serverUrl) return undefined;
+		const handleScroll = (event) => {
+			closeRowMenu();
 		};
-		const handleKeyDown = (event) => {
-			if (event.key === "Escape") setMenuOpenFor(null);
-		};
-		document.addEventListener("mousedown", handlePointerDown);
-		document.addEventListener("keydown", handleKeyDown);
+		document.addEventListener("scroll", handleScroll, true);
+		window.addEventListener("resize", closeRowMenu);
 		return () => {
-			document.removeEventListener("mousedown", handlePointerDown);
-			document.removeEventListener("keydown", handleKeyDown);
+			document.removeEventListener("scroll", handleScroll, true);
+			document.removeEventListener("resize", closeRowMenu);
 		};
-	}, [menuOpenFor]);
+	}, [rowMenu.serverUrl, closeRowMenu]);
 
 	const activeServerUrl = isAuthenticated ? normalizeServerUrl(session?.serverUrl) : null;
 
 	const handleSelect = (server) => {
-		setIsOpen(false);
-		setMenuOpenFor(null);
+		// Clicking the already-active server is a no-op (the row is never disabled so the ⋮ trigger inside it stays clickable).
 		if (normalizeServerUrl(server.serverUrl) === activeServerUrl) return;
+		setIsOpen(false);
+		closeRowMenu();
 		switchServer(server.serverUrl);
 	};
 
 	const handleRemove = (server) => {
-		setMenuOpenFor(null);
+		closeRowMenu();
 		removeServer(server.serverUrl);
 	};
 
 	const handleEdit = (server) => {
-		setMenuOpenFor(null);
+		closeRowMenu();
 		openEditServerModal(server);
 	};
 
 	const handleAddServer = () => {
 		setIsOpen(false);
-		setMenuOpenFor(null);
+		closeRowMenu();
 		openServerModal();
+	};
+
+	const openRowMenu = (server) => {
+		const rect = document
+			.querySelector(`[data-server-menu-trigger="${server.serverUrl}"]`)
+			?.getBoundingClientRect();
+		if (!rect) {
+			setRowMenu({ serverUrl: server.serverUrl, style: { top: 8, right: 8 } });
+			return;
+		}
+		const flipUp = Boolean(
+			rect.bottom + MENU_ESTIMATED_HEIGHT > window.innerHeight
+			&& rect.top > MENU_ESTIMATED_HEIGHT,
+		);
+		setRowMenu({
+			serverUrl: server.serverUrl,
+			style: {
+				...(flipUp
+					? { bottom: window.innerHeight - rect.top + 4 }
+					: { top: rect.bottom + 4 }),
+				right: window.innerWidth - rect.right,
+			},
+		});
 	};
 
 	return (
@@ -108,7 +134,7 @@ function ServerDropdown() {
 				type="button"
 				onClick={() => {
 					setIsOpen(!isOpen);
-					setMenuOpenFor(null);
+					closeRowMenu();
 				}}
 				aria-label="Toggle saved servers"
 				className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-normal font-display tracking-tight text-zinc-300 hover:text-zinc-50 cursor-pointer"
@@ -116,7 +142,7 @@ function ServerDropdown() {
 				<span>Servers</span>
 				<IconChevronDown
 					size={13}
-					className={`shrink-0 transition-transform duration-200 ${isOpen ? "-rotate-180" : "rotate-0"
+					className={`transition-transform duration-200 ${isOpen ? "-rotate-180" : "rotate-0"
 						}`}
 				/>
 			</button>
@@ -144,73 +170,60 @@ function ServerDropdown() {
 
 					return visibleServers.map((server) => {
 						const isActive = normalizeServerUrl(server.serverUrl) === activeServerUrl;
+						const menuOpen = rowMenu.serverUrl === server.serverUrl;
 						return (
-							<div key={server.serverUrl} className="group relative flex w-full items-center">
-								<button
-									type="button"
-									onClick={() => handleSelect(server)}
-									disabled={isActive}
-									className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
-											? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
-											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-zinc-50"
-										}`}
-								>
+							<button
+								key={server.serverUrl}
+								type="button"
+								onClick={() => handleSelect(server)}
+								className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
+									? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
+									: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
+									}`}
+							>
+								<span className="flex-1 flex flex-row items-center gap-2.5">
 									{isActive ? (
 										<ConnectionStatusIcon />
 									) : (
 										<IconServer
 											size={14}
 											stroke={1.8}
-											className="shrink-0 text-zinc-300 group-hover:text-zinc-50"
+											className={
+												isActive
+													? "text-blue-500"
+													: "text-zinc-400 group-hover:text-zinc-200"
+											}
 										/>
 									)}
-									<span className="truncate">{server.serverName || server.serverUrl}</span>
-								</button>
-								<div
-									ref={menuOpenFor === server.serverUrl ? rowMenuRef : null}
-									className="absolute right-1 z-20"
-								>
-									<button
-										type="button"
-										aria-label={`Actions for ${server.serverName || server.serverUrl}`}
-										aria-expanded={menuOpenFor === server.serverUrl}
-										title="Server actions"
-										onClick={(event) => {
+									<span className="block truncate">{server.serverName || server.serverUrl}</span>
+								</span>
+								{/* Clickable span whose click stops propagation so the actions menu opens without selecting the server. */}
+								<span
+									role="button"
+									tabIndex={0}
+									data-server-menu-trigger={server.serverUrl}
+									aria-label={`Actions for ${server.serverName || server.serverUrl}`}
+									aria-expanded={menuOpen}
+									title="Server actions"
+									onClick={(event) => {
+										event.stopPropagation();
+										if (menuOpen) closeRowMenu();
+										else openRowMenu(server);
+									}}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											// Keep the row's own keyboard activation from firing.
+											event.preventDefault();
 											event.stopPropagation();
-											setMenuOpenFor(
-												menuOpenFor === server.serverUrl ? null : server.serverUrl,
-											);
-										}}
-										className={`rounded-xs p-1 text-zinc-500 transition hover:bg-white/5 hover:text-zinc-50 ${menuOpenFor === server.serverUrl
-												? "opacity-100 text-zinc-300"
-												: "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
-											}`}
-									>
-										<IconDots size={14} />
-									</button>
-
-									{menuOpenFor === server.serverUrl && (
-										<div className="absolute right-0 top-full mt-1 w-36 overflow-hidden rounded-xs border border-[#272733] bg-[#141419] py-1 shadow-xl">
-											<button
-												type="button"
-												onClick={() => handleEdit(server)}
-												className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
-											>
-												<IconPencil size={13} stroke={1.8} />
-												Edit
-											</button>
-											<button
-												type="button"
-												onClick={() => handleRemove(server)}
-												className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
-											>
-												<IconTrash size={13} stroke={1.8} />
-												Remove
-											</button>
-										</div>
-									)}
-								</div>
-							</div>
+											if (menuOpen) closeRowMenu();
+											else openRowMenu(server);
+										}
+									}}
+									className="shrink-0 cursor-pointer rounded-xs p-0.5 text-zinc-500 opacity-0 transition group-hover:opacity-100 hover:text-white focus:opacity-100 focus:outline-none focus-visible:text-white"
+								>
+									<IconDotsVertical size={12} stroke={1.8} />
+								</span>
+							</button>
 						);
 					});
 				})()}
@@ -230,6 +243,40 @@ function ServerDropdown() {
 					</button>
 				)}
 			</nav>
+
+			{/* Per-server actions menu - portal, styled like the playlist options menu. Trigger lookup relies on the row keeping its data attribute while the menu is open. */}
+			{rowMenu.serverUrl && createPortal(
+				<>
+					{/* Click-away layer sits above the page but below the menu */}
+					<div className="fixed inset-0 z-40" onClick={closeRowMenu} />
+					<div
+						style={rowMenu.style}
+						className={`fixed z-50 ${MENU_WIDTH} rounded-xs border border-[#2b2b36] bg-[#18181f] py-1 shadow-xl`}
+					>
+						<button
+							type="button"
+							onClick={() => handleEdit(
+								servers.find((server) => server.serverUrl === rowMenu.serverUrl),
+							)}
+							className={itemClass}
+						>
+							<IconEdit size={14} stroke={1.8} />
+							Edit
+						</button>
+						<button
+							type="button"
+							onClick={() => handleRemove(
+								servers.find((server) => server.serverUrl === rowMenu.serverUrl),
+							)}
+							className={`${itemClass} hover:text-red-400`}
+						>
+							<IconTrash size={14} stroke={1.8} />
+							Remove
+						</button>
+					</div>
+				</>,
+				document.body,
+			)}
 		</div>
 	);
 }
