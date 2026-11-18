@@ -321,8 +321,7 @@ export default function LibraryCollectionPage({
 					<div className="flex items-center gap-2">
 						<div className="flex items-center gap-2">
 							<Icon size={19} stroke={1.7} />
-							{/* Play/pause this whole collection (favorites, tracks,
-							libraries, playlists) */}
+							{/* Play/pause this whole collection (favorites, tracks, libraries, playlists) */}
 							{playAll && !isLoading && !isSelectionPending && !error && items.length > 0 && (
 								<button
 									type="button"
