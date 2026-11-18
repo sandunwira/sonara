@@ -111,7 +111,7 @@ function ServerDropdown() {
 					setMenuOpenFor(null);
 				}}
 				aria-label="Toggle saved servers"
-				className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
+				className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-normal font-display tracking-tight text-zinc-300 hover:text-zinc-50 cursor-pointer"
 			>
 				<span>Servers</span>
 				<IconChevronDown
@@ -152,7 +152,7 @@ function ServerDropdown() {
 									disabled={isActive}
 									className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
 											? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
-											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
+											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-zinc-50"
 										}`}
 								>
 									{isActive ? (
@@ -161,7 +161,7 @@ function ServerDropdown() {
 										<IconServer
 											size={14}
 											stroke={1.8}
-											className="shrink-0 text-zinc-400 group-hover:text-zinc-200"
+											className="shrink-0 text-zinc-300 group-hover:text-zinc-50"
 										/>
 									)}
 									<span className="truncate">{server.serverName || server.serverUrl}</span>
@@ -181,7 +181,7 @@ function ServerDropdown() {
 												menuOpenFor === server.serverUrl ? null : server.serverUrl,
 											);
 										}}
-										className={`rounded-xs p-1 text-zinc-500 transition hover:bg-white/5 hover:text-white ${menuOpenFor === server.serverUrl
+										className={`rounded-xs p-1 text-zinc-500 transition hover:bg-white/5 hover:text-zinc-50 ${menuOpenFor === server.serverUrl
 												? "opacity-100 text-zinc-300"
 												: "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
 											}`}
@@ -194,7 +194,7 @@ function ServerDropdown() {
 											<button
 												type="button"
 												onClick={() => handleEdit(server)}
-												className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/5 hover:text-white"
+												className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
 											>
 												<IconPencil size={13} stroke={1.8} />
 												Edit
@@ -220,12 +220,11 @@ function ServerDropdown() {
 					<button
 						type="button"
 						onClick={handleAddServer}
-						className="group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium text-zinc-300 transition cursor-pointer hover:bg-[#1a1a22] hover:text-white"
+						className="group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium text-zinc-600 transition cursor-pointer hover:text-zinc-500"
 					>
 						<IconPlus
 							size={14}
 							stroke={1.8}
-							className="shrink-0 text-zinc-400 group-hover:text-zinc-200"
 						/>
 						<span>Add Server</span>
 					</button>

@@ -79,7 +79,7 @@ function Sidebar() {
 					<button
 						type="button"
 						onClick={() => setLibraryOpen(!libraryOpen)}
-						className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
+						className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-normal font-display tracking-tight text-zinc-300 hover:text-zinc-50 cursor-pointer"
 					>
 						<span>My Library</span>
 						<IconChevronDown
@@ -104,7 +104,7 @@ function Sidebar() {
 										onClick={() => handleNavClick(item.path)}
 										className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
 											? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
-											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
+											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-zinc-50"
 											}`}
 									>
 										<Icon
@@ -113,7 +113,7 @@ function Sidebar() {
 											className={
 												isActive
 													? "text-blue-500"
-													: "text-zinc-400 group-hover:text-zinc-200"
+													: "text-zinc-300 group-hover:text-zinc-50"
 											}
 										/>
 										<span>{item.label}</span>
@@ -129,7 +129,7 @@ function Sidebar() {
 					<button
 						type="button"
 						onClick={() => setPlaylistsOpen(!playlistsOpen)}
-						className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold tracking-tight text-zinc-400 hover:text-zinc-200 cursor-pointer"
+						className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-normal font-display tracking-tight text-zinc-300 hover:text-zinc-50 cursor-pointer"
 					>
 						<span>Playlists</span>
 						<div className="flex items-center gap-2">
@@ -155,7 +155,7 @@ function Sidebar() {
 										if (session) setIsCreatePlaylistOpen(true);
 									}
 								}}
-								className="cursor-pointer rounded-xs text-zinc-400 hover:text-zinc-200 focus:outline-none focus-visible:text-zinc-200"
+								className="cursor-pointer rounded-xs text-zinc-300 hover:text-zinc-50 focus:outline-none focus-visible:text-zinc-50"
 							>
 								<IconPlus size={13} />
 							</span>
