@@ -38,6 +38,9 @@ export default function FoldersPage() {
 			detailPath="/folders"
 			entityList
 			isFolderList
+			// Only a single library's track list can be played, not the
+			// top-level library grid.
+			playAll={Boolean(libraryId)}
 		/>
 	);
 }

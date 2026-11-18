@@ -1,6 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { IconSearch, IconServer } from "@tabler/icons-react";
+import {
+	IconCircleCheckFilled,
+	IconPlayerPauseFilled,
+	IconPlayerPlayFilled,
+	IconSearch,
+	IconServer,
+} from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
 import { usePlayer } from "../context/PlayerContext";
 import { fetchMusicCollection, fetchMusicItem, getThumbnailUrl, getTrackAlbumLink } from "../services/jellyfin";
@@ -10,7 +16,6 @@ import TrackPlayButton from "../components/TrackPlayButton";
 import TrackOptionsMenu from "../components/TrackOptionsMenu";
 import { useDownloadedTracks } from "../services/offlineDownloads";
 import Artwork from "../components/Artwork";
-import { IconCircleCheckFilled } from "@tabler/icons-react";
 
 function formatDuration(seconds) {
 	if (!seconds || !Number.isFinite(seconds)) return "";
@@ -132,6 +137,9 @@ export default function LibraryCollectionPage({
 	entityList = false,
 	isFolderList = false,
 	genreCards = false,
+	// Show a play/pause button next to the headline that starts (or
+	// pauses) playback of this whole collection.
+	playAll = false,
 	// Empty-state copy for a detail view (e.g. "This playlist is empty"),
 	// shown instead of the collection-level "No {title} found" message.
 	detailEmptyTitle,
@@ -140,7 +148,7 @@ export default function LibraryCollectionPage({
 	const location = useLocation();
 	const navigate = useNavigate();
 	const { session, isAuthenticated, openServerModal, libraryVersion } = useJellyfin();
-	const { playTrack, currentTrack, isPlaying: isPlayerPlaying, togglePlay: togglePlayerPlay } = usePlayer();
+	const { playTrack, currentTrack, isPlaying: isPlayerPlaying, togglePlay: togglePlayerPlay, playbackSource, setPlaybackSource } = usePlayer();
 	const { playGenre, pendingGenreIds, activeGenreId, currentGenreNames, isPlaying, togglePlay } = useGenrePlayback();
 	// Loaded data is tagged with the collection it belongs to (server + detail
 	// route). When that key changes, the old items are not rendered at all:
@@ -157,6 +165,24 @@ export default function LibraryCollectionPage({
 	const isSelectionPending = loadedCollection.key !== collectionKey;
 	const items = isSelectionPending ? [] : loadedCollection.items;
 	const error = errorState.key === collectionKey ? errorState.message : "";
+
+	// Header play/pause: playback stamped with this collection's source id
+	// (detail id, or the page title for whole-library pages) is playing this
+	// list — playTrack clears the stamp on any other start, so a stale
+	// source can't keep the pause icon lit on the wrong page.
+	const playAllSourceId = detailId || title.toLowerCase();
+	const isCollectionActive = playAll
+		&& playbackSource?.type === "collection"
+		&& playbackSource?.id === playAllSourceId;
+	const handlePlayAll = () => {
+		if (!items.length) return;
+		if (isCollectionActive) {
+			togglePlayerPlay();
+			return;
+		}
+		playTrack(items[0], items);
+		setPlaybackSource({ type: "collection", id: playAllSourceId, name: pageTitle });
+	};
 
 	useEffect(() => {
 		if (!isAuthenticated || !session) {
@@ -295,6 +321,23 @@ export default function LibraryCollectionPage({
 					<div className="flex items-center gap-2">
 						<div className="flex items-center gap-2">
 							<Icon size={19} stroke={1.7} />
+							{/* Play/pause this whole collection (favorites, tracks,
+							libraries, playlists) */}
+							{playAll && !isLoading && !isSelectionPending && !error && items.length > 0 && (
+								<button
+									type="button"
+									onClick={handlePlayAll}
+									aria-label={isCollectionActive && isPlayerPlaying ? `Pause ${pageTitle}` : `Play ${pageTitle}`}
+									title={isCollectionActive && isPlayerPlaying ? `Pause ${pageTitle}` : `Play ${pageTitle}`}
+									className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500"
+								>
+									{isCollectionActive && isPlayerPlaying ? (
+										<IconPlayerPauseFilled size={12} />
+									) : (
+										<IconPlayerPlayFilled size={12} className="ml-0.5" />
+									)}
+								</button>
+							)}
 							<h1 className="font-display text-xl font-bold tracking-tight text-white">{pageTitle}</h1>
 						</div>
 						{!isLoading && !isSelectionPending && !error && (

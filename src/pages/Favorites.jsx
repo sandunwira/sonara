@@ -15,6 +15,7 @@ export default function FavoritesPage() {
 			title="Favourites"
 			icon={IconHeart}
 			loadItems={loadFavorites}
+			playAll
 		/>
 	);
 }

@@ -10,6 +10,7 @@ export default function TracksPage() {
 			title="Tracks"
 			icon={IconMusic}
 			loadItems={loadTracks}
+			playAll
 		/>
 	);
 }

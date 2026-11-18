@@ -14,6 +14,7 @@ export default function PlaylistDetailPage() {
 			loadItems={() => Promise.resolve([])}
 			detailId={playlistId}
 			detailFilter="parentId"
+			playAll
 			detailEmptyTitle="This playlist is empty"
 			detailEmptySubtitle="Add tracks from any track's more options menu."
 		/>
