@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+	IconChevronLeft,
 	IconCircleCheckFilled,
 	IconPlayerPauseFilled,
 	IconPlayerPlayFilled,
@@ -318,6 +319,16 @@ export default function LibraryCollectionPage({
 		<div className="flex flex-col">
 			<header className="sticky top-0 z-30 flex flex-col gap-4 bg-[#0a0a0d] sm:flex-row sm:items-center sm:justify-between py-7">
 				<div className="flex items-center">
+					{detailId && (
+						<button
+							type="button"
+							onClick={() => (detailPath ? navigate(detailPath) : navigate(-1))}
+							aria-label={detailPath ? `Back to ${title}` : "Go back"}
+							className="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white cursor-pointer"
+						>
+							<IconChevronLeft size={16} />
+						</button>
+					)}
 					<div className="flex items-center gap-2">
 						<div className="flex items-center gap-2">
 							<Icon size={19} stroke={1.7} />
