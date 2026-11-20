@@ -39,7 +39,7 @@ function HomePage() {
 	};
 
 	return (
-		<div className="flex flex-col space-y-7 pt-7">
+		<div className="flex flex-col space-y-14 pt-7">
 			{isAuthenticated && tracks.length === 0 && !isLoading ? (
 				<div className="mb-6 flex flex-col items-center justify-center rounded-xs border border-[#22222a] bg-[#121217] p-8 text-center">
 					<div className="flex h-12 w-12 items-center justify-center rounded-xs bg-zinc-800 text-zinc-400 mb-3">

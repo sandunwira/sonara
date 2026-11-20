@@ -58,9 +58,9 @@ function AlbumCarousel({
 	return (
 		<section>
 			{/* Section Header */}
-			<div className="mb-3 flex items-center justify-between">
+			<div className="mb-7 flex items-center justify-between">
 				<div className="flex items-center gap-2">
-					<h2 className="font-display text-base font-semibold tracking-tight text-white">
+					<h2 className="font-display text-xl font-bold tracking-tight text-white">
 						{title}
 					</h2>
 					<button
