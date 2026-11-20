@@ -21,7 +21,7 @@ import {
 import { useLayoutEffect, useRef } from "react";
 import { usePlayer, subscribePlayerProgress, getPlayerProgress } from "../context/PlayerContext";
 import { useJellyfin } from "../context/JellyfinContext";
-import { fetchMusicArtists, getThumbnailUrl } from "../services/jellyfin";
+import { fetchMusicArtists, getThumbnailUrl, getTrackAlbumLink } from "../services/jellyfin";
 import useFavoriteToggle from "../hooks/useFavoriteToggle";
 import Artwork from "../components/Artwork";
 import { useNavigate } from "react-router-dom";
@@ -158,6 +158,9 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 
 	const upcomingStartIndex = Math.max(queueIndex + 1, 0);
 	const upcomingCount = Math.max(queue.length - upcomingStartIndex, 0);
+	// Album page for the current track, resolved the same way as the track
+	// options menu (real Jellyfin album, or a virtual album keyed on its tags).
+	const albumLink = currentTrack ? getTrackAlbumLink(currentTrack) : null;
 
 	return (
 		<footer className="relative z-40 flex h-20 w-full shrink-0 items-center justify-between border-t border-[#1b1b22] bg-[#0c0c0e] px-4 text-zinc-300">
@@ -165,14 +168,27 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 			<div className="flex w-1/4 min-w-48 items-center gap-3">
 				{currentTrack ? (
 					<>
-						<div className="group relative h-12 w-12 rounded-md bg-[#18181f] border border-[#22222a]">
+						{/* Artwork doubles as a link to the playing track's album. */}
+						<button
+							type="button"
+							onClick={() => {
+								if (!albumLink) return;
+								navigate(`/albums/${albumLink.id}`, {
+									state: { title: currentTrack.album || albumLink.title },
+								});
+							}}
+							disabled={!albumLink}
+							title="Go to album"
+							aria-label={albumLink ? `Go to album ${currentTrack.album || albumLink.title}` : undefined}
+							className="group h-12 w-12 cursor-pointer rounded-md border border-[#22222a] bg-[#18181f] disabled:cursor-default"
+						>
 							<Artwork
 								src={currentTrack.cover ? getThumbnailUrl(currentTrack.cover, 96) : currentTrack.cover}
 								alt={currentTrack.title}
 								loading="eager"
-								className="h-full w-full object-cover rounded-md"
+								className="h-full w-full object-cover object-center rounded-md"
 							/>
-						</div>
+						</button>
 
 						<div className="flex min-w-0 flex-1 flex-col justify-center">
 							<div className="flex items-center gap-1.5">
