@@ -7,6 +7,7 @@ import {
 	IconRepeat,
 	IconRepeatOnce,
 	IconLayoutList,
+	IconLayoutListFilled,
 	IconPictureInPicture,
 	IconDeviceSpeaker,
 	IconHeart,
@@ -129,12 +130,12 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 			<div className="flex w-1/4 min-w-48 items-center gap-3">
 				{currentTrack ? (
 					<>
-						<div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-xs bg-[#18181f] shadow-md border border-[#22222a]">
+						<div className="group relative h-12 w-12 rounded-md bg-[#18181f] border border-[#22222a]">
 							<Artwork
 								src={currentTrack.cover ? getThumbnailUrl(currentTrack.cover, 96) : currentTrack.cover}
 								alt={currentTrack.title}
 								loading="eager"
-								className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+								className="h-full w-full object-cover rounded-md"
 							/>
 						</div>
 
@@ -198,8 +199,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						type="button"
 						onClick={toggleShuffle}
 						aria-label="Toggle shuffle"
-						className={`transition hover:scale-110 ${isShuffle ? "text-blue-500" : "text-zinc-400 hover:text-white"
-							}`}
+						className={`transition hover:scale-110 ${isShuffle ? "text-blue-500" : "text-zinc-400 hover:text-white"} cursor-pointer`}
 					>
 						<IconArrowsShuffle size={14} stroke={2} />
 					</button>
@@ -209,7 +209,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						type="button"
 						onClick={prevTrack}
 						aria-label="Previous track"
-						className="text-zinc-300 hover:text-white transition hover:scale-110"
+						className="text-zinc-300 hover:text-white transition hover:scale-110 cursor-pointer"
 					>
 						<IconPlayerSkipBackFilled size={13} />
 					</button>
@@ -219,7 +219,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						type="button"
 						onClick={togglePlay}
 						aria-label={isPlaying ? "Pause" : "Play"}
-						className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition hover:scale-105 active:scale-95"
+						className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition hover:scale-105 active:scale-95 cursor-pointer"
 					>
 						{isPlaying ? (
 							<IconPlayerPauseFilled size={13} />
@@ -233,7 +233,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						type="button"
 						onClick={nextTrack}
 						aria-label="Next track"
-						className="text-zinc-300 hover:text-white transition hover:scale-110"
+						className="text-zinc-300 hover:text-white transition hover:scale-110 cursor-pointer"
 					>
 						<IconPlayerSkipForwardFilled size={13} />
 					</button>
@@ -244,8 +244,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						onClick={toggleRepeat}
 						aria-label={repeatMode === "one" ? "Repeat: one track" : repeatMode === "all" ? "Repeat: all" : "Repeat: off"}
 						title={repeatMode === "one" ? "Repeating one track" : repeatMode === "all" ? "Repeating queue" : "Repeat off"}
-						className={`transition hover:scale-110 ${repeatMode !== "off" ? "text-blue-500" : "text-zinc-400 hover:text-white"
-							}`}
+						className={`transition hover:scale-110 ${repeatMode !== "off" ? "text-blue-500" : "text-zinc-400 hover:text-white"} cursor-pointer`}
 					>
 						{repeatMode === "one"
 							? <IconRepeatOnce size={14} stroke={2} />
@@ -265,13 +264,12 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 					onClick={toggleQueuePanel}
 					aria-label="View queue"
 					aria-expanded={isQueuePanelOpen}
-					className={`relative text-zinc-400 transition hover:text-white ${isQueuePanelOpen ? "text-white" : ""}`}
+					className={`text-zinc-400 transition hover:text-white ${isQueuePanelOpen ? "text-white" : ""} cursor-pointer`}
 				>
-					<IconLayoutList size={14} stroke={1.8} />
-					{upcomingCount > 0 && (
-						<span className="absolute -right-1.5 -top-1.5 min-w-3 rounded-full bg-blue-500 px-0.5 text-center text-[8px] leading-3 text-white">
-							{upcomingCount}
-						</span>
+					{isQueuePanelOpen ? (
+						<IconLayoutListFilled size={14} stroke={1.8} />
+					) : (
+						<IconLayoutList size={14} stroke={1.8} />
 					)}
 				</button>
 
@@ -281,8 +279,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 					onClick={toggleFavorite}
 					title={isFavorite ? "Remove from favorites" : "Add to favorites"}
 					aria-label="Favorite"
-					className={`transition ${isFavorite ? "text-red-500 hover:text-red-400" : "hover:text-white"
-						}`}
+					className={`transition ${isFavorite ? "text-red-500 hover:text-red-400" : "hover:text-white"} cursor-pointer`}
 				>
 					<IconHeart
 						size={14}
@@ -297,7 +294,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						type="button"
 						onClick={toggleMute}
 						aria-label="Mute toggle"
-						className="hover:text-white transition"
+						className="hover:text-white transition cursor-pointer"
 					>
 						{isMuted || volume === 0 ? (
 							<IconVolumeOff size={14} stroke={1.8} />
