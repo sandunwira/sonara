@@ -15,7 +15,7 @@ import {
 	IconVolume,
 	IconVolumeOff,
 	IconMaximize,
-	IconDots,
+	IconDotsVertical,
 	IconMusic,
 } from "@tabler/icons-react";
 import { useLayoutEffect, useRef } from "react";
@@ -190,8 +190,8 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 							/>
 						</button>
 
-						<div className="flex min-w-0 flex-1 flex-col justify-center">
-							<div className="flex items-center gap-1.5">
+						<div className="flex min-w-0 flex-col justify-center">
+							<div className="flex items-center gap-2">
 								<span
 									onClick={(event) => {
 										event.stopPropagation();
@@ -207,9 +207,9 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 										type="button"
 										onClick={onTrackOptions}
 										aria-label="Track options"
-										className="shrink-0 text-zinc-400 hover:text-white"
+										className="text-zinc-400 hover:text-white"
 									>
-										<IconDots size={13} stroke={2} />
+										<IconDotsVertical size={12} stroke={2} />
 									</button>
 								)} */}
 							</div>
