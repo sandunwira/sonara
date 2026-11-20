@@ -141,6 +141,9 @@ export default function LibraryCollectionPage({
 	// Show a play/pause button next to the headline that starts (or
 	// pauses) playback of this whole collection.
 	playAll = false,
+	// Hide the header back button on detail pages reachable from the
+	// sidebar (playlists), where a back target doesn't make sense.
+	hideBack = false,
 	// Empty-state copy for a detail view (e.g. "This playlist is empty"),
 	// shown instead of the collection-level "No {title} found" message.
 	detailEmptyTitle,
@@ -319,11 +322,11 @@ export default function LibraryCollectionPage({
 		<div className="flex flex-col">
 			<header className="sticky top-0 z-30 flex flex-col gap-4 bg-[#0a0a0d] sm:flex-row sm:items-center sm:justify-between py-7">
 				<div className="flex items-center">
-					{detailId && (
+					{detailId && !hideBack && (
 						<button
 							type="button"
-							onClick={() => (detailPath ? navigate(detailPath) : navigate(-1))}
-							aria-label={detailPath ? `Back to ${title}` : "Go back"}
+							onClick={() => navigate(detailPath)}
+							aria-label={`Back to ${title}`}
 							className="flex h-8 w-8 items-center justify-center text-zinc-400 transition hover:text-white cursor-pointer"
 						>
 							<IconChevronLeft size={16} />

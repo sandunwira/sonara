@@ -15,6 +15,7 @@ export default function PlaylistDetailPage() {
 			detailId={playlistId}
 			detailFilter="parentId"
 			playAll
+			hideBack
 			detailEmptyTitle="This playlist is empty"
 			detailEmptySubtitle="Add tracks from any track's more options menu."
 		/>
