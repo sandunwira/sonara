@@ -10,7 +10,7 @@ import {
 import { usePlayer, subscribePlayerProgress, getPlayerProgress } from "../context/PlayerContext";
 import Artwork from "../components/Artwork";
 import { fetchLyrics } from "../services/lyrics";
-import { getThumbnailUrl, getTrackArtistLink } from "../services/jellyfin";
+import { getThumbnailUrl, getTrackArtistLink, getTrackAlbumLink } from "../services/jellyfin";
 
 // Index of the lyric line being sung at `currentTime` (a small offset
 // compensates for latency).
@@ -200,6 +200,9 @@ function QueuePanel({ isOpen, onClose }) {
 
 	const upcomingStartIndex = Math.max(queueIndex + 1, 0);
 	const upcomingTracks = queue.slice(upcomingStartIndex);
+	// Album page for the current track, resolved exactly like the track
+	// options menu and the bottom player bar's artwork link.
+	const albumLink = currentTrack ? getTrackAlbumLink(currentTrack) : null;
 
 	useEffect(() => {
 		if (!isOpen) return undefined;
@@ -247,18 +250,30 @@ function QueuePanel({ isOpen, onClose }) {
 							</p>
 							{currentTrack ? (
 								<div className="rounded-xs space-y-2">
-									<div className="relative overflow-hidden rounded-xs bg-[#101014] border border-zinc-900">
+									<button
+										type="button"
+										onClick={() => {
+											if (!albumLink) return;
+											navigate(`/albums/${albumLink.id}`, {
+												state: { title: currentTrack.album || albumLink.title },
+											});
+										}}
+										disabled={!albumLink}
+										title="Go to album"
+										aria-label={albumLink ? `Go to album ${currentTrack.album || albumLink.title}` : undefined}
+										className="block w-full cursor-pointer rounded-sm bg-[#101014] border border-zinc-900 disabled:cursor-default"
+									>
 										<Artwork
 											src={currentTrack.cover}
 											alt={currentTrack.title}
-											className="aspect-square w-full object-cover"
+											className="rounded-sm aspect-square w-full object-cover"
 										/>
-									</div>
+									</button>
 									<div>
 										<p
 											onClick={() => currentTrack?.id && navigate(`/tracks/${currentTrack.id}`, { state: { track: currentTrack } })}
 											title="View track details"
-											className="truncate text-sm font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+											className="block truncate text-sm font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
 										>
 											{currentTrack.title}
 										</p>
@@ -268,7 +283,7 @@ function QueuePanel({ isOpen, onClose }) {
 												if (artistLink) navigate(`/artists/${artistLink.id}`, { state: { name: currentTrack.artist } });
 											}}
 											title="View artist"
-											className="truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+											className="block truncate text-xs font-light text-zinc-400 hover:text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
 										>
 											{currentTrack.artist}
 										</p>
