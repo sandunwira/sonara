@@ -18,7 +18,8 @@ import {
 	IconDots,
 	IconMusic,
 } from "@tabler/icons-react";
-import { usePlayer, usePlayerProgress } from "../context/PlayerContext";
+import { useLayoutEffect, useRef } from "react";
+import { usePlayer, subscribePlayerProgress, getPlayerProgress } from "../context/PlayerContext";
 import { useJellyfin } from "../context/JellyfinContext";
 import { fetchMusicArtists, getThumbnailUrl } from "../services/jellyfin";
 import useFavoriteToggle from "../hooks/useFavoriteToggle";
@@ -32,43 +33,77 @@ function formatSeconds(sec) {
 	return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
 }
 
-// Progress ticks ~4x/second. Keeping the subscription in this small child
-// means the rest of the player bar (artwork, buttons, volume) is not
-// re-rendered while a track plays.
+// Progress ticks ~4x/second ("timeupdate"). Instead of re-rendering on every
+// tick, this subscribes to the progress store imperatively and writes the
+// slider position, its filled track and the two time labels straight to the
+// DOM. The labels only change when the whole second (or the duration) does,
+// so most ticks are a single style write. The component itself now renders
+// only when the player bar does (track change, play/pause, volume, ...).
 function PlayerProgressBar({ seek, fallbackDuration }) {
-	const { currentTime, duration } = usePlayerProgress();
-	const validDuration = duration && duration > 0 ? duration : (fallbackDuration || 180);
-	const progressPercent = Math.min(100, Math.max(0, (currentTime / validDuration) * 100));
+	const inputRef = useRef(null);
+	const currentTimeRef = useRef(null);
+	const durationRef = useRef(null);
+	const lastSecondRef = useRef(null);
+	const lastDurationRef = useRef(null);
+	// Latest props for the subscription and the input handler, without
+	// re-subscribing or re-rendering on every parent update.
+	const seekRef = useRef(seek);
+	const fallbackDurationRef = useRef(fallbackDuration);
+	seekRef.current = seek;
+	fallbackDurationRef.current = fallbackDuration;
+
+	useLayoutEffect(() => {
+		const paint = () => {
+			const { currentTime, duration } = getPlayerProgress();
+			const total = duration > 0 ? duration : (fallbackDurationRef.current || 180);
+			const percent = Math.min(100, Math.max(0, (currentTime / total) * 100));
+
+			const input = inputRef.current;
+			if (input) {
+				input.value = String(percent);
+				input.style.background = `linear-gradient(to right, #ffffff ${percent}%, #272731 ${percent}%)`;
+			}
+
+			const second = Math.floor(currentTime);
+			if (currentTimeRef.current && second !== lastSecondRef.current) {
+				lastSecondRef.current = second;
+				currentTimeRef.current.textContent = formatSeconds(currentTime);
+			}
+			if (durationRef.current && total !== lastDurationRef.current) {
+				lastDurationRef.current = total;
+				durationRef.current.textContent = formatSeconds(total);
+			}
+		};
+
+		// Paint before the first frame so the labels never flash empty.
+		paint();
+		return subscribePlayerProgress(paint);
+	}, []);
 
 	const handleSeek = (e) => {
-		const newPercent = parseFloat(e.target.value);
-		seek((newPercent / 100) * validDuration);
+		const { duration } = getPlayerProgress();
+		const total = duration > 0 ? duration : (fallbackDurationRef.current || 180);
+		seekRef.current((parseFloat(e.target.value) / 100) * total);
 	};
 
 	return (
 		<div className="mt-1 flex w-full items-center gap-2">
-			<span className="w-7 text-right text-[10px] text-zinc-400">
-				{formatSeconds(currentTime)}
-			</span>
+			<span ref={currentTimeRef} className="w-7 text-right text-[10px] text-zinc-400" />
 
 			<div className="group relative flex flex-1 items-center">
 				<input
+					ref={inputRef}
 					type="range"
 					min="0"
 					max="100"
 					step="0.1"
-					value={progressPercent}
+					defaultValue={0}
 					onChange={handleSeek}
 					className="h-1 w-full cursor-pointer appearance-none rounded-full bg-zinc-800 accent-white transition-all group-hover:h-1.5 focus:outline-none"
-					style={{
-						background: `linear-gradient(to right, #ffffff ${progressPercent}%, #272731 ${progressPercent}%)`,
-					}}
 				/>
 			</div>
 
-			<span className="w-7 text-left text-[10px] text-zinc-400">
-				{formatSeconds(validDuration)}
-			</span>
+			<span ref={durationRef} className="w-7 text-left text-[10px] text-zinc-400" />
 		</div>
 	);
 }

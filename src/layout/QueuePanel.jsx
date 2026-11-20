@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
 	IconChevronDown,
@@ -7,52 +7,88 @@ import {
 	IconTrash,
 	IconX,
 } from "@tabler/icons-react";
-import { usePlayer, usePlayerProgress } from "../context/PlayerContext";
+import { usePlayer, subscribePlayerProgress, getPlayerProgress } from "../context/PlayerContext";
 import Artwork from "../components/Artwork";
 import { fetchLyrics } from "../services/lyrics";
 import { getThumbnailUrl, getTrackArtistLink } from "../services/jellyfin";
 
+// Index of the lyric line being sung at `currentTime` (a small offset
+// compensates for latency).
+function findActiveLyricIndex(synced, currentTime) {
+	if (!synced) return -1;
+	let index = -1;
+	for (let i = 0; i < synced.length; i += 1) {
+		if (synced[i].time <= currentTime + 0.3) index = i;
+		else break;
+	}
+	return index;
+}
+
 // Lyrics for the current track (LRCLIB, persisted in the local database).
-// This is the only part of the queue panel that follows the playback
-// position, so the ~4x/second progress updates re-render just this block
-// instead of the whole queue list. The outer panel only mounts it while
-// open, so no lyrics lookup happens for a closed panel.
+// Collapsible like the sidebar sections and collapsed by default: while it
+// stays closed nothing is fetched, no playback-position subscription is
+// active and nothing renders. Playback position is read imperatively instead
+// of through usePlayerProgress, so even when expanded the highlight only
+// re-renders when a new line starts (no work on ordinary 4x/second ticks).
 function Lyrics({ track, onSeek }) {
-	const { currentTime } = usePlayerProgress();
-	// null = no lyrics for this track: the whole section stays hidden.
+	const [isOpen, setIsOpen] = useState(false);
+	// { trackId, lines }: tagged with its track so lyrics resolved for a
+	// previous track are never shown while the next one is still loading.
+	// lines === undefined → not resolved yet, null → no lyrics available.
 	const [lyrics, setLyrics] = useState(null);
+	const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
 	const lyricsScrollRef = useRef(null);
 	const lyricLineRefs = useRef([]);
 	// Manual scrolling pauses the follow-the-line auto scroll briefly.
 	const userScrollUntilRef = useRef(0);
+	// Latest lines/position for the subscription without re-subscribing.
+	const lyricsRef = useRef(null);
+	const currentTimeRef = useRef(0);
 
+	const lines = lyrics && lyrics.trackId === track?.id ? lyrics.lines : undefined;
+	lyricsRef.current = lines;
+
+	// Only fetch while expanded. Results are cached in memory and in the
+	// local database, so reopening the section does not hit the network.
 	useEffect(() => {
+		if (!isOpen) return undefined;
+		const trackId = track?.id ?? null;
 		if (!track?.title || !track?.artist) {
-			setLyrics(null);
+			setLyrics({ trackId, lines: null });
 			return undefined;
 		}
 		let cancelled = false;
-		setLyrics(null);
 		lyricLineRefs.current = [];
 		userScrollUntilRef.current = 0;
 		fetchLyrics(track.artist, track.title).then((result) => {
-			if (!cancelled) setLyrics(result);
+			if (cancelled) return;
+			setLyrics({ trackId, lines: result });
 		});
 		return () => {
 			cancelled = true;
 		};
-	}, [track?.id, track?.title, track?.artist]);
+	}, [isOpen, track?.id, track?.title, track?.artist]);
 
-	// Line currently being sung (a small offset compensates for latency).
-	const activeLyricIndex = useMemo(() => {
-		if (!lyrics?.synced) return -1;
-		let index = -1;
-		for (let i = 0; i < lyrics.synced.length; i += 1) {
-			if (lyrics.synced[i].time <= currentTime + 0.3) index = i;
-			else break;
-		}
-		return index;
-	}, [lyrics, currentTime]);
+	// Follow the playback position while expanded: progress ticks ~4x/second
+	// but the highlight changes only when a line starts, and setState bails
+	// out for every other tick, so ordinary ticks cause no render.
+	useEffect(() => {
+		if (!isOpen) return undefined;
+		const followPosition = () => {
+			const { currentTime } = getPlayerProgress();
+			currentTimeRef.current = currentTime;
+			const nextIndex = findActiveLyricIndex(lyricsRef.current?.synced, currentTime);
+			setActiveLyricIndex((previous) => (previous === nextIndex ? previous : nextIndex));
+		};
+		followPosition();
+		return subscribePlayerProgress(followPosition);
+	}, [isOpen]);
+
+	// Lyrics arrive asynchronously mid-track, so resolve the highlight for the
+	// current position as soon as they are available.
+	useEffect(() => {
+		setActiveLyricIndex(findActiveLyricIndex(lines?.synced, currentTimeRef.current));
+	}, [lines]);
 
 	// Keep the active line centred in the lyrics box.
 	useEffect(() => {
@@ -71,59 +107,75 @@ function Lyrics({ track, onSeek }) {
 		return "text-xs text-zinc-500 hover:text-zinc-300";
 	};
 
-	if (!lyrics?.synced && !lyrics?.plain) return null;
+	// Nothing to attach lyrics to.
+	if (!track) return null;
 
 	return (
-		<>
-			{lyrics.synced && (
-				<div className="space-y-2">
-					<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-						Lyrics
-					</p>
-					<div
-						ref={lyricsScrollRef}
-						onWheel={() => {
-							userScrollUntilRef.current = Date.now() + 4000;
-						}}
-						className="relative max-h-36 overflow-y-auto overscroll-none pr-1 p-3 leading-loose rounded-xs bg-[#101014] border border-zinc-900"
-					>
-						{lyrics.synced.map((line, index) => (
-							line.text ? (
-								<button
-									key={index}
-									type="button"
-									ref={(el) => {
-										lyricLineRefs.current[index] = el;
-									}}
-									onClick={() => onSeek(line.time)}
-									className={`block w-full text-left leading-loose transition-colors duration-200 ${lyricLineClass(index)}`}
-								>
-									{line.text}
-								</button>
-							) : (
-								<div
-									key={index}
-									ref={(el) => {
-										lyricLineRefs.current[index] = el;
-									}}
-									className="h-3"
-								/>
-							)
-						))}
-					</div>
+		<div>
+			{/* Collapsible header, same pattern as the sidebar sections. */}
+			<button
+				type="button"
+				onClick={() => setIsOpen(!isOpen)}
+				aria-expanded={isOpen}
+				className="flex w-full items-center justify-between py-1.5 cursor-pointer"
+			>
+				<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+					Lyrics
+				</p>
+				<IconChevronDown
+					size={13}
+					className={`transition-transform duration-200 ${isOpen ? "-rotate-180" : "rotate-0"}`}
+				/>
+			</button>
+
+			{isOpen && (
+				<div className="mt-1 space-y-2">
+					{lines?.synced && (
+						<div
+							ref={lyricsScrollRef}
+							onWheel={() => {
+								userScrollUntilRef.current = Date.now() + 4000;
+							}}
+							className="relative max-h-36 overflow-y-auto overscroll-none pr-1 p-3 leading-loose rounded-xs bg-[#101014] border border-zinc-900"
+						>
+							{lines.synced.map((line, index) => (
+								line.text ? (
+									<button
+										key={index}
+										type="button"
+										ref={(el) => {
+											lyricLineRefs.current[index] = el;
+										}}
+										onClick={() => onSeek(line.time)}
+										className={`block w-full text-left leading-loose transition-colors duration-200 ${lyricLineClass(index)}`}
+									>
+										{line.text}
+									</button>
+								) : (
+									<div
+										key={index}
+										ref={(el) => {
+											lyricLineRefs.current[index] = el;
+										}}
+										className="h-3"
+									/>
+								)
+							))}
+						</div>
+					)}
+					{lines?.plain && (
+						<p className="rounded-xs border border-[#22222a] bg-[#141419] px-3 py-2 whitespace-pre-line text-xs leading-relaxed text-zinc-400">
+							{lines.plain}
+						</p>
+					)}
+					{!lines && (
+						<p className="text-[10px] text-zinc-600">
+							{lines === undefined ? "Finding lyrics…" : "No lyrics available for this track."}
+						</p>
+					)}
 				</div>
 			)}
-			{lyrics.plain && (
-				<div className="space-y-2">
-					<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-						Lyrics
-					</p>
-					<p className="rounded-xs border border-[#22222a] bg-[#141419] px-3 py-2 whitespace-pre-line text-xs leading-relaxed text-zinc-400">
-						{lyrics.plain}
-					</p>
-				</div>
-			)}
-		</>
+		</div>
 	);
 }
 
@@ -235,7 +287,7 @@ function QueuePanel({ isOpen, onClose }) {
 							)}
 						</div>
 
-						{/* Lyrics (hidden entirely when none are available) */}
+						{/* Lyrics, collapsible and collapsed by default (nothing is fetched or followed until it is expanded) */}
 						<Lyrics track={currentTrack} onSeek={seek} />
 
 						{/* Upcoming tracks */}

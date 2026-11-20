@@ -47,6 +47,18 @@ export function usePlayerProgress() {
 	return useSyncExternalStore(subscribeToProgress, getProgressSnapshot, getProgressSnapshot);
 }
 
+// Imperative progress access for things that can update themselves without a
+// React render (the player bar's slider). Subscribing here and writing the DOM
+// directly keeps the ~4x/second "timeupdate" ticks out of React entirely; use
+// usePlayerProgress only where a render is actually required.
+export function subscribePlayerProgress(listener) {
+	return subscribeToProgress(listener);
+}
+
+export function getPlayerProgress() {
+	return progressSnapshot;
+}
+
 function restoreSavedQueue(saved, session) {
 	if (!saved || !Array.isArray(saved.queue)) {
 		return { queue: [], queueIndex: -1, currentTrack: null, playbackSource: null };
