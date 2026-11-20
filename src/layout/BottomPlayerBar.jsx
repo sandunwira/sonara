@@ -198,7 +198,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 										navigate(`/tracks/${currentTrack.id}`, { state: { currentTrack } });
 									}}
 									title={currentTrack.title}
-									className="w-fit truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
+									className="block truncate text-xs font-semibold text-white cursor-pointer hover:underline underline-offset-2 transition-all duration-200"
 								>
 									{currentTrack.title}
 								</span>
@@ -219,7 +219,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 									navigateToArtist();
 								}}
 								title={currentTrack.artist}
-								className="w-fit truncate text-[11px] font-light text-zinc-400 cursor-pointer hover:text-white hover:underline underline-offset-2 transition-all duration-200">
+								className="block truncate text-[11px] font-light text-zinc-400 cursor-pointer hover:text-white hover:underline underline-offset-2 transition-all duration-200">
 								{currentTrack.artist}
 							</span>
 						</div>
