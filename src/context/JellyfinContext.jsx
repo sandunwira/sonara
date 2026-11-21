@@ -290,6 +290,9 @@ export function JellyfinProvider({ children }) {
 		}
 
 		setIsSyncingLibrary(true);
+		// One toast that stays visible for the whole sync and then turns into
+		// the result, so progress and completion never stack up as two toasts.
+		const toastId = toast.loading("Syncing library…");
 		try {
 			const purgeSummary = await syncJellyfinLibrary(session.serverUrl, session.userId, session.accessToken);
 			setLibraryVersion((version) => version + 1);
@@ -299,13 +302,13 @@ export function JellyfinProvider({ children }) {
 				userId: session.userId,
 				removedStaleCacheEntries: purgeSummary?.removedStaleEntries ?? 0,
 			});
-			toast.success("Library synced");
+			toast.success("Library synced", { id: toastId });
 		} catch (error) {
 			console.error("Failed to sync Jellyfin library:", error);
 			await recordAppLog("error", "library-sync", "Jellyfin library sync failed", {
 				message: error.message,
 			});
-			toast.error("Could not sync library");
+			toast.error("Could not sync library", { id: toastId });
 		} finally {
 			setIsSyncingLibrary(false);
 		}

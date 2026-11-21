@@ -6,6 +6,7 @@ import {
 	IconDotsVertical,
 	IconEdit,
 	IconPlus,
+	IconRefresh,
 	IconServer,
 	IconTrash,
 } from "@tabler/icons-react";
@@ -21,7 +22,7 @@ const CONNECTION_STATUS_META = {
 
 // Menu styling mirrors PlaylistOptionsMenu so both sidebar sections look and behave identically (fixed placement next to the trigger, portal, and close on Escape / scroll / resize / click-away).
 const MENU_WIDTH = "w-44";
-const MENU_ESTIMATED_HEIGHT = 90;
+const MENU_ESTIMATED_HEIGHT = 128;
 
 const itemClass = "flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white cursor-pointer";
 
@@ -44,7 +45,7 @@ function ConnectionStatusIcon() {
 
 // Collapsible header row and nav-style entries styled like the sidebar's Playlists section: same hover colors, same plus-in-header shortcut and the same per-row ⋮ options menu (portal + placement + scroll-close).
 function ServerDropdown() {
-	const { isAuthenticated, session, servers, switchServer, removeServer, openServerModal, openEditServerModal } = useJellyfin();
+	const { isAuthenticated, session, servers, switchServer, removeServer, openServerModal, openEditServerModal, syncLibrary, isSyncingLibrary } = useJellyfin();
 	const [isOpen, setIsOpen] = useState(false);
 	// Which server's action menu is open + its fixed placement, captured once at open time from the trigger's rect.
 	const [rowMenu, setRowMenu] = useState({ serverUrl: null, style: null });
@@ -96,6 +97,13 @@ function ServerDropdown() {
 	const handleEdit = (server) => {
 		closeRowMenu();
 		openEditServerModal(server);
+	};
+
+	// The action always targets the connected server (the library cache and
+	// session belong to it), so it is only offered on the active server row.
+	const handleSyncLibrary = () => {
+		closeRowMenu();
+		syncLibrary();
 	};
 
 	const handleAddServer = () => {
@@ -253,6 +261,23 @@ function ServerDropdown() {
 						style={rowMenu.style}
 						className={`fixed z-50 ${MENU_WIDTH} rounded-xs border border-[#2b2b36] bg-[#18181f] py-1 shadow-xl`}
 					>
+						{/* Library sync applies to the connected server's cached
+							metadata, so it only appears on the active row. */}
+						{normalizeServerUrl(rowMenu.serverUrl) === activeServerUrl && (
+							<button
+								type="button"
+								onClick={handleSyncLibrary}
+								disabled={isSyncingLibrary}
+								className={`${itemClass} disabled:cursor-not-allowed disabled:opacity-50`}
+							>
+								<IconRefresh
+									size={14}
+									stroke={1.8}
+									className={isSyncingLibrary ? "animate-spin" : ""}
+								/>
+								{isSyncingLibrary ? "Syncing…" : "Sync Library"}
+							</button>
+						)}
 						<button
 							type="button"
 							onClick={() => handleEdit(

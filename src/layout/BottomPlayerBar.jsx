@@ -180,7 +180,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 							disabled={!albumLink}
 							title="Go to album"
 							aria-label={albumLink ? `Go to album ${currentTrack.album || albumLink.title}` : undefined}
-							className="group h-12 w-12 cursor-pointer rounded-md border border-[#22222a] bg-[#18181f] disabled:cursor-default"
+							className="group h-12 w-12 aspect-square cursor-pointer rounded-md border border-[#22222a] bg-[#18181f] disabled:cursor-default"
 						>
 							<Artwork
 								src={currentTrack.cover ? getThumbnailUrl(currentTrack.cover, 96) : currentTrack.cover}
