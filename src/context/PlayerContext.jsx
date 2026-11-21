@@ -9,11 +9,19 @@ import {
 	getStoredPlayerQueue,
 	saveStoredPlayerQueueTracks,
 	saveStoredPlayerQueueState,
+	getStoredCrossfadeDuration,
+	saveStoredCrossfadeDuration,
 	recordAppLog,
 } from "../services/jellyfinCache";
 import { ensureDownloadedTracksLoaded, peekDownloadedTrack } from "../services/offlineDownloads";
 
 const PlayerContext = createContext();
+
+// Crossfades are deliberately ramps on the elements' own `volume` rather than
+// Web Audio gain nodes: Jellyfin streams are cross-origin, and a
+// MediaElementAudioSourceNode would output silence unless the server sent
+// matching CORS headers.
+const MAX_CROSSFADE_SECONDS = 12;
 
 // Playback position lives outside React state on purpose: the audio element's
 // "timeupdate" event fires ~4x/second, and keeping it in the provider made
@@ -97,6 +105,9 @@ export function PlayerProvider({ children }) {
 	const [repeatMode, setRepeatMode] = useState("off");
 	const [queue, setQueue] = useState([]);
 	const [queueIndex, setQueueIndex] = useState(-1);
+	// Seconds of overlap between the end of one track and the start of the
+	// next; 0 disables crossfading (tracks then switch only when one ends).
+	const [crossfadeDuration, setCrossfadeDurationState] = useState(0);
 	// Where the current playback originated (e.g. a genre card). Genre cards
 	// keep their play/pause button visible only while this points at them.
 	const [playbackSource, setPlaybackSource] = useState(null);
@@ -111,7 +122,21 @@ export function PlayerProvider({ children }) {
 	// shuffle was enabled so it can be restored when shuffle is turned off.
 	const isShuffleRef = useRef(isShuffle);
 	const originalQueueOrderRef = useRef(null);
+	// `audioRef` is always the element currently being heard; `spareAudioRef`
+	// is the other one (the outgoing element while a crossfade is running).
 	const audioRef = useRef(null);
+	const spareAudioRef = useRef(null);
+	// The in-flight crossfade (volume ramp) or null. Kept outside React state
+	// because it is animation-frame driven.
+	const fadeRef = useRef(null);
+	// Set once per track when its end has already started the next track, so
+	// the ~4x/second timeupdate cannot advance the queue twice.
+	const crossfadeTriggeredRef = useRef(false);
+	const crossfadeDurationRef = useRef(0);
+	const crossfadeSaveTimerRef = useRef(null);
+	// Incremented on every track start so late play() callbacks from a track
+	// that was already skipped over cannot report or ramp the wrong one.
+	const playRequestRef = useRef(0);
 	const reportedTrackIdRef = useRef(null);
 	const activePlaybackTrackRef = useRef(null);
 	const progressIntervalRef = useRef(null);
@@ -119,6 +144,10 @@ export function PlayerProvider({ children }) {
 	const nextTrackRef = useRef(null);
 	const lastAudibleVolumeRef = useRef(85);
 	const mediaPositionRef = useRef(-1);
+	// Mirrors of the volume state for the crossfade ramp and audio callbacks,
+	// which must read the latest value without being re-created per render.
+	const volumeRef = useRef(volume);
+	const isMutedRef = useRef(isMuted);
 	// True while the audio element plays a locally downloaded file instead of
 	// the Jellyfin stream (used to skip offline playback reporting).
 	const localPlaybackRef = useRef(false);
@@ -130,6 +159,9 @@ export function PlayerProvider({ children }) {
 	isRepeatRef.current = repeatMode;
 	isShuffleRef.current = isShuffle;
 	sessionRef.current = session;
+	volumeRef.current = volume;
+	isMutedRef.current = isMuted;
+	crossfadeDurationRef.current = crossfadeDuration;
 
 	// Downloaded-track records are loaded once per server so startTrack can
 	// resolve a local file synchronously (no SQLite round-trip per track).
@@ -138,6 +170,45 @@ export function PlayerProvider({ children }) {
 			ensureDownloadedTracksLoaded(session.serverUrl).catch(() => {});
 		}
 	}, [session?.serverUrl]);
+
+	// Restore the saved crossfade length once, then persist slider changes
+	// (debounced so a drag does not write to the database on every pixel).
+	useEffect(() => {
+		let cancelled = false;
+		getStoredCrossfadeDuration()
+			.then((seconds) => {
+				if (cancelled || typeof seconds !== "number" || !Number.isFinite(seconds)) return;
+				const clamped = Math.max(0, Math.min(MAX_CROSSFADE_SECONDS, Math.round(seconds)));
+				crossfadeDurationRef.current = clamped;
+				setCrossfadeDurationState(clamped);
+			})
+			.catch(() => {
+				// A missing/unreadable setting simply keeps crossfade disabled.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const setCrossfadeDuration = (value) => {
+		const numeric = Number(value);
+		// The slider moves in whole seconds; keep values on that grid.
+		const clamped = Number.isFinite(numeric)
+			? Math.max(0, Math.min(MAX_CROSSFADE_SECONDS, Math.round(numeric)))
+			: 0;
+		crossfadeDurationRef.current = clamped;
+		setCrossfadeDurationState(clamped);
+
+		if (crossfadeSaveTimerRef.current) {
+			clearTimeout(crossfadeSaveTimerRef.current);
+		}
+		crossfadeSaveTimerRef.current = setTimeout(() => {
+			crossfadeSaveTimerRef.current = null;
+			saveStoredCrossfadeDuration(clamped).catch((error) => {
+				console.error("Could not save the crossfade setting:", error);
+			});
+		}, 400);
+	};
 
 	// Picks where a track plays from: the downloaded local file when one is
 	// recorded for this server, otherwise the Jellyfin stream.
@@ -255,7 +326,7 @@ export function PlayerProvider({ children }) {
 			clearInterval(progressIntervalRef.current);
 			progressIntervalRef.current = null;
 		}
-		audioRef.current?.pause();
+		pauseAllAudio();
 		activePlaybackTrackRef.current = null;
 		reportedTrackIdRef.current = null;
 		setIsPlaying(false);
@@ -350,155 +421,423 @@ export function PlayerProvider({ children }) {
 		}
 	};
 
-	// Initialize Audio element
+	// ---- Crossfade helpers ----
+	const baseVolume = () => volumeRef.current / 100;
+	const isAudioMuted = () => isMutedRef.current || volumeRef.current === 0;
+
+	const releaseAudioElement = (audio) => {
+		if (!audio) return;
+		try {
+			audio.pause();
+			audio.removeAttribute("src");
+			audio.load();
+		} catch {
+			// The element is being torn down; nothing useful to do on failure.
+		}
+	};
+
+	// Equal-power ramps keep the perceived loudness steady while two
+	// (uncorrelated) tracks overlap.
+	const applyCrossfadeLevels = (fade, progress) => {
+		const base = baseVolume();
+		const muted = isAudioMuted();
+		const clamped = Math.max(0, Math.min(1, progress));
+		fade.outgoing.volume = base * Math.cos((clamped * Math.PI) / 2);
+		fade.incoming.volume = base * Math.sin((clamped * Math.PI) / 2);
+		fade.outgoing.muted = muted;
+		fade.incoming.muted = muted;
+		fade.progress = clamped;
+	};
+
+	const stopFadeTimer = (fade) => {
+		if (fade?.timer) {
+			clearInterval(fade.timer);
+			fade.timer = null;
+		}
+	};
+
+	const finishCrossfade = (fade) => {
+		if (fadeRef.current !== fade) return;
+		fadeRef.current = null;
+		stopFadeTimer(fade);
+		// The incoming element is now the current track; make sure it sits at
+		// the user's chosen level and release the outgoing stream.
+		fade.incoming.volume = baseVolume();
+		fade.incoming.muted = isAudioMuted();
+		releaseAudioElement(fade.outgoing);
+	};
+
+	// Abandons a running fade (pause, seek-driven track change, error, ...).
+	// The incoming element stays the current track; the outgoing is stopped.
+	const cancelCrossfade = () => {
+		const fade = fadeRef.current;
+		if (!fade) return;
+		fadeRef.current = null;
+		stopFadeTimer(fade);
+		fade.incoming.volume = baseVolume();
+		fade.incoming.muted = isAudioMuted();
+		releaseAudioElement(fade.outgoing);
+	};
+
+	// Stops both elements: the active one is paused (its source is kept so the
+	// track can resume) while the outgoing one is fully released.
+	const pauseAllAudio = () => {
+		cancelCrossfade();
+		audioRef.current?.pause();
+		releaseAudioElement(spareAudioRef.current);
+	};
+
+	const beginCrossfade = (incoming, outgoing, seconds) => {
+		if (!seconds || seconds <= 0) return;
+		if (fadeRef.current) cancelCrossfade();
+		const fade = {
+			incoming,
+			outgoing,
+			startedAt: performance.now(),
+			duration: seconds,
+			progress: 0,
+			timer: null,
+		};
+		fadeRef.current = fade;
+		applyCrossfadeLevels(fade, 0);
+
+		// A timer rather than requestAnimationFrame: rAF is suspended while
+		// the window is hidden/minimized, which would freeze the fade (and
+		// leave both tracks at partial volume). Background timer throttling is
+		// fine — the 40ms cadence only gets coarser.
+		const step = () => {
+			if (fadeRef.current !== fade) return;
+			const progress = Math.min(1, (performance.now() - fade.startedAt) / (seconds * 1000));
+			applyCrossfadeLevels(fade, progress);
+			if (progress >= 1) finishCrossfade(fade);
+		};
+		fade.timer = setInterval(step, 40);
+	};
+
+	// A fade may never be longer than half the track it belongs to: very short
+	// interludes would otherwise begin fading out the moment they start.
+	const effectiveCrossfadeSeconds = (duration) => {
+		const configured = crossfadeDurationRef.current;
+		if (!configured || configured <= 0) return 0;
+		if (!duration || !Number.isFinite(duration) || duration <= 0) return configured;
+		return Math.min(configured, duration / 2);
+	};
+
+	// Called from the active element's timeupdate. Starts the next track before
+	// the current one ends so their volumes can overlap.
+	const maybeCrossfadeNext = (audio) => {
+		if (audio !== audioRef.current) return;
+		if (fadeRef.current || crossfadeTriggeredRef.current) return;
+		// Repeat-one restarts on "ended" instead (two copies of one track
+		// would just overlap awkwardly).
+		if (isRepeatRef.current === "one") return;
+		if (!audio.duration || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+
+		const fadeSeconds = effectiveCrossfadeSeconds(audio.duration);
+		if (fadeSeconds <= 0) return;
+		const remaining = audio.duration - audio.currentTime;
+		if (remaining > fadeSeconds || remaining <= 0) return;
+
+		const currentQueue = queueRef.current;
+		const index = queueIndexRef.current;
+		const canWrap = isRepeatRef.current === "all";
+		const hasNext = index >= 0
+			&& (index < currentQueue.length - 1 || (canWrap && currentQueue.length > 0));
+		if (!hasNext) return;
+
+		// A single-track repeat queue would "fade into itself", which can only
+		// cut the tail off; let that one loop on "ended" as before.
+		const nextTrack = index < currentQueue.length - 1
+			? currentQueue[index + 1]
+			: currentQueue[0];
+		if (!nextTrack || nextTrack.id === currentTrackRef.current?.id) return;
+
+		crossfadeTriggeredRef.current = true;
+		nextTrackRef.current?.({ wrap: canWrap });
+	};
+
+	// Initialize the pair of Audio elements. Only one is audible at a time;
+	// they swap roles on crossfades, so every listener is attached to both and
+	// ignores events coming from the element that is not currently playing.
 	useEffect(() => {
-		const audio = new Audio();
-		audioRef.current = audio;
-		audio.preload = "auto";
+		const createAudioElement = () => {
+			const audio = new Audio();
+			audio.preload = "auto";
+			const isActive = () => audio === audioRef.current;
 
-		const onTimeUpdate = () => {
-			setProgress({ currentTime: audio.currentTime });
-			syncMediaSessionPosition(audio.currentTime, audio.duration);
-		};
-
-		const onLoadedMetadata = () => {
-			if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-				setProgress({ duration: audio.duration });
+			const onTimeUpdate = () => {
+				if (!isActive()) return;
+				setProgress({ currentTime: audio.currentTime });
 				syncMediaSessionPosition(audio.currentTime, audio.duration);
-			}
-		};
+				maybeCrossfadeNext(audio);
+			};
 
-		const onPlay = () => setIsPlaying(true);
-		const onPause = () => {
-			setIsPlaying(false);
-			if (activePlaybackTrackRef.current) {
-				reportPlayback("progress", activePlaybackTrackRef.current, true);
-			}
-		};
-		const onVolumeChange = () => {
-			const currentVolume = Math.round(audio.volume * 100);
-			setVolumeState(currentVolume);
-			setIsMuted(audio.muted);
-			if (!audio.muted && currentVolume > 0) {
-				lastAudibleVolumeRef.current = currentVolume;
-			}
-		};
-
-		const onEnded = () => {
-			const endedTrack = activePlaybackTrackRef.current;
-			stopPlaybackReporting();
-			if (isRepeatRef.current === "one") {
-				audio.currentTime = 0;
-				audio.play().then(() => startPlaybackReporting(endedTrack)).catch(() => { });
-			} else {
-				// "all" wraps back to the queue's first track; "off" stops at the end.
-				nextTrackRef.current?.({ wrap: isRepeatRef.current === "all" });
-			}
-		};
-
-		const onError = (e) => {
-			console.error("Audio playback error:", audio.error);
-			let errorMessage = "Could not stream audio track";
-			if (audio.error) {
-				switch (audio.error.code) {
-					case 1:
-						errorMessage = "Audio playback aborted";
-						break;
-					case 2:
-						errorMessage = "Network error loading audio";
-						break;
-					case 3:
-						errorMessage = "Audio decoding error";
-						break;
-					case 4:
-						errorMessage = "Audio format not supported by server/player";
-						break;
-					default:
-						errorMessage = audio.error.message || errorMessage;
+			const onLoadedMetadata = () => {
+				if (!isActive()) return;
+				if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+					setProgress({ duration: audio.duration });
+					syncMediaSessionPosition(audio.currentTime, audio.duration);
 				}
-			}
-			recordAppLog("error", "audio", "Audio playback failed", {
-				trackTitle: currentTrackRef.current?.title || null,
-				trackId: currentTrackRef.current?.id || null,
-				errorCode: audio.error?.code ?? null,
-				message: errorMessage,
-				src: audio.src,
-			});
-			toast.error(errorMessage);
-			setIsPlaying(false);
-			stopPlaybackReporting();
+			};
+
+			const onPlay = () => {
+				if (!isActive()) return;
+				setIsPlaying(true);
+			};
+			const onPause = () => {
+				if (!isActive()) return;
+				setIsPlaying(false);
+				if (activePlaybackTrackRef.current) {
+					reportPlayback("progress", activePlaybackTrackRef.current, true);
+				}
+			};
+			const onVolumeChange = () => {
+				// During a fade the volumes are animation-driven; syncing them
+				// back into state would make the volume slider jump around.
+				if (!isActive() || fadeRef.current) return;
+				const currentVolume = Math.round(audio.volume * 100);
+				setVolumeState(currentVolume);
+				setIsMuted(audio.muted);
+				if (!audio.muted && currentVolume > 0) {
+					lastAudibleVolumeRef.current = currentVolume;
+				}
+			};
+
+			const onEnded = () => {
+				// The outgoing element ending mid-crossfade is expected; the
+				// incoming one already became the active element.
+				if (!isActive()) return;
+				const endedTrack = activePlaybackTrackRef.current;
+				stopPlaybackReporting();
+				if (isRepeatRef.current === "one") {
+					audio.currentTime = 0;
+					audio.play().then(() => startPlaybackReporting(endedTrack)).catch(() => { });
+				} else {
+					// "all" wraps back to the queue's first track; "off" stops at the end.
+					nextTrackRef.current?.({ wrap: isRepeatRef.current === "all" });
+				}
+			};
+
+			const onError = () => {
+				if (!isActive()) return;
+				cancelCrossfade();
+				console.error("Audio playback error:", audio.error);
+				let errorMessage = "Could not stream audio track";
+				if (audio.error) {
+					switch (audio.error.code) {
+						case 1:
+							errorMessage = "Audio playback aborted";
+							break;
+						case 2:
+							errorMessage = "Network error loading audio";
+							break;
+						case 3:
+							errorMessage = "Audio decoding error";
+							break;
+						case 4:
+							errorMessage = "Audio format not supported by server/player";
+							break;
+						default:
+							errorMessage = audio.error.message || errorMessage;
+					}
+				}
+				recordAppLog("error", "audio", "Audio playback failed", {
+					trackTitle: currentTrackRef.current?.title || null,
+					trackId: currentTrackRef.current?.id || null,
+					errorCode: audio.error?.code ?? null,
+					message: errorMessage,
+					src: audio.src,
+				});
+				toast.error(errorMessage);
+				setIsPlaying(false);
+				stopPlaybackReporting();
+			};
+
+			audio.addEventListener("timeupdate", onTimeUpdate);
+			audio.addEventListener("loadedmetadata", onLoadedMetadata);
+			audio.addEventListener("play", onPlay);
+			audio.addEventListener("pause", onPause);
+			audio.addEventListener("volumechange", onVolumeChange);
+			audio.addEventListener("ended", onEnded);
+			audio.addEventListener("error", onError);
+
+			return {
+				audio,
+				teardown: () => {
+					audio.removeEventListener("timeupdate", onTimeUpdate);
+					audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+					audio.removeEventListener("play", onPlay);
+					audio.removeEventListener("pause", onPause);
+					audio.removeEventListener("volumechange", onVolumeChange);
+					audio.removeEventListener("ended", onEnded);
+					audio.removeEventListener("error", onError);
+				},
+			};
 		};
 
-		audio.addEventListener("timeupdate", onTimeUpdate);
-		audio.addEventListener("loadedmetadata", onLoadedMetadata);
-		audio.addEventListener("play", onPlay);
-		audio.addEventListener("pause", onPause);
-		audio.addEventListener("volumechange", onVolumeChange);
-		audio.addEventListener("ended", onEnded);
-		audio.addEventListener("error", onError);
+		const primary = createAudioElement();
+		const secondary = createAudioElement();
+		audioRef.current = primary.audio;
+		spareAudioRef.current = secondary.audio;
 
 		return () => {
 			if (progressIntervalRef.current) {
 				clearInterval(progressIntervalRef.current);
 				progressIntervalRef.current = null;
 			}
+			if (crossfadeSaveTimerRef.current) {
+				clearTimeout(crossfadeSaveTimerRef.current);
+				crossfadeSaveTimerRef.current = null;
+			}
+			cancelCrossfade();
 			if (activePlaybackTrackRef.current) {
 				reportPlayback("stop", activePlaybackTrackRef.current);
 				activePlaybackTrackRef.current = null;
 			}
-			audio.pause();
-			audio.removeEventListener("timeupdate", onTimeUpdate);
-			audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-			audio.removeEventListener("play", onPlay);
-			audio.removeEventListener("pause", onPause);
-			audio.removeEventListener("volumechange", onVolumeChange);
-			audio.removeEventListener("ended", onEnded);
-			audio.removeEventListener("error", onError);
+			primary.teardown();
+			secondary.teardown();
+			releaseAudioElement(primary.audio);
+			releaseAudioElement(secondary.audio);
 		};
 	}, []);
 
 	useEffect(() => {
-		if (!audioRef.current) return;
-		audioRef.current.volume = volume / 100;
-		audioRef.current.muted = isMuted || volume === 0;
+		const audio = audioRef.current;
+		if (!audio) return;
+		const fade = fadeRef.current;
+		if (fade) {
+			applyCrossfadeLevels(fade, fade.progress);
+			return;
+		}
+		audio.volume = volume / 100;
+		audio.muted = isMuted || volume === 0;
 	}, [volume, isMuted]);
+
+	// Turning crossfade off while a fade is running should cut over to the new
+	// track immediately instead of letting the old ramp finish.
+	useEffect(() => {
+		if (crossfadeDuration === 0) cancelCrossfade();
+	}, [crossfadeDuration]);
+
+	const handlePlayFailure = (track, err) => {
+		// Pausing/resuming during the brief buffer window aborts play(); that
+		// is not an error worth reporting to the listener.
+		if (err?.name === "AbortError") return;
+		console.error("Audio play error:", err);
+		recordAppLog("error", "audio", `Could not play "${track.title}"`, {
+			trackId: track.id,
+			message: err?.message || String(err),
+		});
+		toast.error(`Could not play "${track.title}"`);
+		setIsPlaying(false);
+	};
 
 	const startTrack = (track) => {
 		if (!track) return;
+
+		const requestId = ++playRequestRef.current;
+		const previousAudio = audioRef.current;
+		const source = resolvePlaybackSource(track);
+		// Restarting the same track (playNow on the current row) or resuming
+		// from a pause is hard-switched: crossfading a song into itself would
+		// overlap two different positions. The first play has nothing to fade.
+		const fadeSeconds = source.src
+			&& previousAudio?.src
+			&& !previousAudio.paused
+			&& currentTrackRef.current?.id !== track.id
+			? effectiveCrossfadeSeconds(previousAudio.duration)
+			: 0;
+		const canCrossfade = fadeSeconds > 0 && Boolean(spareAudioRef.current);
 
 		setCurrentTrack(track);
 		currentTrackRef.current = track;
 		setProgress({ currentTime: 0, duration: track.duration || 0 });
 		mediaPositionRef.current = -1;
+		crossfadeTriggeredRef.current = false;
 
-		if (audioRef.current) {
-			const source = resolvePlaybackSource(track);
-			if (source.src) {
-				stopPlaybackReporting();
-				audioRef.current.volume = volume / 100;
-				audioRef.current.muted = isMuted || volume === 0;
-				audioRef.current.src = source.src;
-				localPlaybackRef.current = source.isLocal;
-				audioRef.current
-					.play()
-					.then(() => {
-						setIsPlaying(true);
-						startPlaybackReporting(track);
-					})
-					.catch((err) => {
-						console.error("Audio play error:", err);
-						recordAppLog("error", "audio", `Could not play "${track.title}"`, {
-							trackId: track.id,
-							message: err?.message || String(err),
-						});
-						toast.error(`Could not play "${track.title}"`);
-						setIsPlaying(false);
-					});
-			} else {
-				toast.error(`No stream URL found for "${track.title}"`);
-				setIsPlaying(false);
-			}
+		if (!source.src) {
+			cancelCrossfade();
+			releaseAudioElement(spareAudioRef.current);
+			toast.error(`No stream URL found for "${track.title}"`);
+			setIsPlaying(false);
+			return;
 		}
+
+		stopPlaybackReporting();
+
+		if (!canCrossfade) {
+			cancelCrossfade();
+			// An outgoing element can still be sounding while a crossfade was
+			// buffering; a hard switch must leave exactly one element playing.
+			releaseAudioElement(spareAudioRef.current);
+			const audio = audioRef.current;
+			if (!audio) return;
+			audio.volume = baseVolume();
+			audio.muted = isAudioMuted();
+			audio.src = source.src;
+			localPlaybackRef.current = source.isLocal;
+			audio
+				.play()
+				.then(() => {
+					if (playRequestRef.current !== requestId) return;
+					setIsPlaying(true);
+					startPlaybackReporting(track);
+				})
+				.catch((err) => {
+					if (playRequestRef.current !== requestId) return;
+					handlePlayFailure(track, err);
+				});
+			return;
+		}
+
+		// Crossfade: the next track starts on the idle element while the
+		// current one ramps down underneath it. The incoming element becomes
+		// the active one immediately so progress, seek and media metadata all
+		// follow the new track.
+		cancelCrossfade();
+		const outgoing = previousAudio;
+		const incoming = spareAudioRef.current;
+		incoming.pause();
+		incoming.volume = 0;
+		incoming.muted = isAudioMuted();
+		incoming.src = source.src;
+		localPlaybackRef.current = source.isLocal;
+		audioRef.current = incoming;
+		spareAudioRef.current = outgoing;
+
+		incoming
+			.play()
+			.then(() => {
+				// A rapid second skip (or a pause during buffering) may have
+				// superseded this attempt.
+				if (playRequestRef.current !== requestId || audioRef.current !== incoming) return;
+				if (incoming.paused) return;
+				setIsPlaying(true);
+				startPlaybackReporting(track);
+
+				// Buffering may have used up part (or all) of the outgoing
+				// track: never ramp longer than what actually remains.
+				const outgoingRemaining = outgoing.duration - outgoing.currentTime;
+				const actualFade = outgoing.paused || outgoing.ended
+					? 0
+					: Number.isFinite(outgoingRemaining) && outgoingRemaining > 0
+						? Math.min(fadeSeconds, outgoingRemaining)
+						: fadeSeconds;
+				if (actualFade <= 0) {
+					incoming.volume = baseVolume();
+					incoming.muted = isAudioMuted();
+					releaseAudioElement(outgoing);
+				} else {
+					beginCrossfade(incoming, outgoing, actualFade);
+				}
+			})
+			.catch((err) => {
+				if (playRequestRef.current !== requestId) return;
+				handlePlayFailure(track, err);
+				// The outgoing element is still holding the old track; stop it
+				// rather than leaving untracked audio playing.
+				releaseAudioElement(outgoing);
+			});
 	};
 
 	const playTrack = (track, newQueue = null) => {
@@ -644,7 +983,10 @@ export function PlayerProvider({ children }) {
 	const togglePlay = () => {
 		if (audioRef.current) {
 			if (isPlaying) {
-				audioRef.current.pause();
+				// Drops the outgoing half of a running fade (or one still
+				// buffering) too, otherwise it would keep sounding after the
+				// visible pause.
+				pauseAllAudio();
 				setIsPlaying(false);
 			} else {
 				if (!audioRef.current.src && currentTrack) {
@@ -776,10 +1118,10 @@ export function PlayerProvider({ children }) {
 			}
 			if (audio.src) audio.play().catch(() => { });
 		};
-		const pausePlayback = () => audio?.pause();
+		const pausePlayback = () => pauseAllAudio();
 		const stopPlayback = () => {
 			if (!audio) return;
-			audio.pause();
+			pauseAllAudio();
 			if (audio.src) audio.currentTime = 0;
 		};
 
@@ -953,6 +1295,8 @@ export function PlayerProvider({ children }) {
 				isMuted,
 				isShuffle,
 				repeatMode,
+				crossfadeDuration,
+				setCrossfadeDuration,
 				queue,
 				queueIndex,
 				playbackSource,
@@ -992,6 +1336,8 @@ export function usePlayer() {
 			isMuted: false,
 			isShuffle: false,
 			repeatMode: "off",
+			crossfadeDuration: 0,
+			setCrossfadeDuration: () => { },
 			queue: [],
 			queueIndex: -1,
 			playbackSource: null,

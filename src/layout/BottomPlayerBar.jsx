@@ -17,8 +17,10 @@ import {
 	IconMaximize,
 	IconDotsVertical,
 	IconMusic,
+	IconArrowsExchange,
 } from "@tabler/icons-react";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePlayer, subscribePlayerProgress, getPlayerProgress } from "../context/PlayerContext";
 import { useJellyfin } from "../context/JellyfinContext";
 import { fetchMusicArtists, getThumbnailUrl, getTrackAlbumLink } from "../services/jellyfin";
@@ -105,6 +107,117 @@ function PlayerProgressBar({ seek, fallbackDuration }) {
 
 			<span ref={durationRef} className="w-7 text-left text-[10px] text-zinc-400" />
 		</div>
+	);
+}
+
+// Crossfade length control: a compact trigger in the player bar opens a
+// portal-rendered panel above it (so it never gets clipped by the footer),
+// closing on Escape, scroll, resize or a click-away.
+const MAX_CROSSFADE_SECONDS = 12;
+const CROSSFADE_PANEL_WIDTH = 224;
+
+function formatCrossfade(seconds) {
+	if (!seconds) return "Off";
+	return `${seconds}s`;
+}
+
+function CrossfadeControl() {
+	const { crossfadeDuration, setCrossfadeDuration } = usePlayer();
+	const [isOpen, setIsOpen] = useState(false);
+	const [position, setPosition] = useState(null);
+	const triggerRef = useRef(null);
+
+	const close = () => {
+		setIsOpen(false);
+		setPosition(null);
+	};
+
+	const open = () => {
+		const rect = triggerRef.current?.getBoundingClientRect();
+		if (!rect) return;
+		setPosition({
+			// Anchored to the trigger and above it; the bar sits at the bottom,
+			// so there is always room in that direction.
+			bottom: window.innerHeight - rect.top + 8,
+			right: Math.max(
+				8,
+				Math.min(window.innerWidth - rect.right, window.innerWidth - CROSSFADE_PANEL_WIDTH - 8),
+			),
+		});
+		setIsOpen(true);
+	};
+
+	useEffect(() => {
+		if (!isOpen) return undefined;
+		const onKeyDown = (event) => {
+			if (event.key === "Escape") close();
+		};
+		const onScroll = () => close();
+		document.addEventListener("keydown", onKeyDown);
+		document.addEventListener("scroll", onScroll, true);
+		window.addEventListener("resize", onScroll);
+		return () => {
+			document.removeEventListener("keydown", onKeyDown);
+			document.removeEventListener("scroll", onScroll, true);
+			window.removeEventListener("resize", onScroll);
+		};
+	}, [isOpen]);
+
+	const percent = (crossfadeDuration / MAX_CROSSFADE_SECONDS) * 100;
+	const isEnabled = crossfadeDuration > 0;
+
+	return (
+		<>
+			<button
+				ref={triggerRef}
+				type="button"
+				onClick={() => (isOpen ? close() : open())}
+				aria-label="Crossfade duration"
+				aria-expanded={isOpen}
+				title={isEnabled ? `Crossfade: ${formatCrossfade(crossfadeDuration)}` : "Crossfade off"}
+				className={`transition hover:scale-110 cursor-pointer ${isEnabled ? "text-blue-500" : "text-zinc-400 hover:text-white"}`}
+			>
+				<IconArrowsExchange size={14} stroke={1.8} />
+			</button>
+
+			{isOpen && position && createPortal(
+				<>
+					<div className="fixed inset-0 z-50" onClick={close} />
+					<div
+						style={position}
+						className="fixed z-60 w-56 rounded-xs border border-[#2b2b36] bg-[#18181f] p-3 shadow-xl"
+						role="dialog"
+						aria-label="Crossfade duration"
+					>
+						<div className="mb-2 flex items-center justify-between">
+							<span className="font-display text-[10px] font-medium tracking-[0.14em] text-zinc-400">
+								Crossfade
+							</span>
+							<span className="text-[11px] font-semibold text-white">
+								{formatCrossfade(crossfadeDuration)}
+							</span>
+						</div>
+						<input
+							type="range"
+							min="0"
+							max={MAX_CROSSFADE_SECONDS}
+							step="1"
+							value={crossfadeDuration}
+							onChange={(event) => setCrossfadeDuration(Number(event.target.value))}
+							aria-label="Crossfade duration in seconds"
+							aria-valuetext={formatCrossfade(crossfadeDuration)}
+							className="volume-slider h-4 w-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+							style={{ "--volume": `${percent}%` }}
+						/>
+						<div className="mt-1.5 flex items-center justify-between text-[9px] uppercase tracking-wide text-zinc-600">
+							<span>Off</span>
+							<span>{MAX_CROSSFADE_SECONDS}s</span>
+						</div>
+					</div>
+				</>,
+				document.body,
+			)}
+		</>
 	);
 }
 
@@ -309,6 +422,9 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 
 			{/* Right auxiliary tools & volume */}
 			<div className="flex w-1/4 min-w-50 items-center justify-end gap-3 text-zinc-400">
+				{/* Crossfade duration */}
+				<CrossfadeControl />
+
 				{/* Playlist / Queue - toggles the collapsible right panel */}
 				<button
 					type="button"

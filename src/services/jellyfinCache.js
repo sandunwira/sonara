@@ -731,6 +731,39 @@ export async function saveStoredPlayerQueueState(queueState) {
 	return true;
 }
 
+// Crossfade length is a small player preference, stored in the same app_state
+// table as the queue. Returns null when it has never been set so the caller
+// can keep its own default.
+export async function getStoredCrossfadeDuration() {
+	const database = await getDatabase();
+	if (!database) return null;
+
+	const rows = await database.select(
+		"SELECT data FROM app_state WHERE state_key = $1",
+		["player_crossfade_seconds"],
+	);
+	if (rows.length === 0) return null;
+	try {
+		const seconds = Number(JSON.parse(rows[0].data)?.seconds);
+		return Number.isFinite(seconds) ? seconds : null;
+	} catch {
+		return null;
+	}
+}
+
+export async function saveStoredCrossfadeDuration(seconds) {
+	const database = await getDatabase();
+	if (!database) return false;
+
+	await database.execute(
+		`INSERT INTO app_state (state_key, data)
+		 VALUES ($1, $2)
+		 ON CONFLICT(state_key) DO UPDATE SET data = excluded.data`,
+		["player_crossfade_seconds", JSON.stringify({ seconds })],
+	);
+	return true;
+}
+
 export async function recordAppLog(level, source, message, details = null) {
 	try {
 		const database = await getDatabase();
