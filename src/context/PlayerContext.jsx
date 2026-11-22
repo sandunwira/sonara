@@ -11,6 +11,8 @@ import {
 	saveStoredPlayerQueueState,
 	getStoredCrossfadeDuration,
 	saveStoredCrossfadeDuration,
+	getStoredPlayerVolume,
+	saveStoredPlayerVolume,
 	recordAppLog,
 } from "../services/jellyfinCache";
 import { ensureDownloadedTracksLoaded, peekDownloadedTrack } from "../services/offlineDownloads";
@@ -134,6 +136,10 @@ export function PlayerProvider({ children }) {
 	const crossfadeTriggeredRef = useRef(false);
 	const crossfadeDurationRef = useRef(0);
 	const crossfadeSaveTimerRef = useRef(null);
+	// Volume/mute are restored once, then written back (debounced) so the
+	// player comes back at the same level after a restart.
+	const volumeRestoredRef = useRef(false);
+	const volumeSaveTimerRef = useRef(null);
 	// Incremented on every track start so late play() callbacks from a track
 	// that was already skipped over cannot report or ramp the wrong one.
 	const playRequestRef = useRef(0);
@@ -209,6 +215,46 @@ export function PlayerProvider({ children }) {
 			});
 		}, 400);
 	};
+
+	// The player's volume level and mute state survive restarts. The restore
+	// runs once (before the persisting effect is allowed to write, so the
+	// default 85% can never overwrite a saved value on startup).
+	useEffect(() => {
+		let cancelled = false;
+		getStoredPlayerVolume()
+			.then((saved) => {
+				if (cancelled) return;
+				volumeRestoredRef.current = true;
+				if (!saved) return;
+				volumeRef.current = saved.volume;
+				isMutedRef.current = saved.isMuted;
+				setVolumeState(saved.volume);
+				setIsMuted(saved.isMuted);
+				if (saved.volume > 0) {
+					lastAudibleVolumeRef.current = saved.volume;
+				}
+			})
+			.catch(() => {
+				volumeRestoredRef.current = true;
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!volumeRestoredRef.current) return undefined;
+		if (volumeSaveTimerRef.current) {
+			clearTimeout(volumeSaveTimerRef.current);
+		}
+		volumeSaveTimerRef.current = setTimeout(() => {
+			volumeSaveTimerRef.current = null;
+			saveStoredPlayerVolume(volume, isMuted).catch((error) => {
+				console.error("Could not save the player volume:", error);
+			});
+		}, 400);
+		return undefined;
+	}, [volume, isMuted]);
 
 	// Picks where a track plays from: the downloaded local file when one is
 	// recorded for this server, otherwise the Jellyfin stream.
@@ -688,6 +734,10 @@ export function PlayerProvider({ children }) {
 			if (crossfadeSaveTimerRef.current) {
 				clearTimeout(crossfadeSaveTimerRef.current);
 				crossfadeSaveTimerRef.current = null;
+			}
+			if (volumeSaveTimerRef.current) {
+				clearTimeout(volumeSaveTimerRef.current);
+				volumeSaveTimerRef.current = null;
 			}
 			cancelCrossfade();
 			if (activePlaybackTrackRef.current) {

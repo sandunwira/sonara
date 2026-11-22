@@ -764,6 +764,44 @@ export async function saveStoredCrossfadeDuration(seconds) {
 	return true;
 }
 
+// Volume/mute belong to the player, not to a server, so they are stored once
+// in app_state instead of the per-server cache. Returns null until the user
+// has changed the volume for the first time.
+export async function getStoredPlayerVolume() {
+	const database = await getDatabase();
+	if (!database) return null;
+
+	const rows = await database.select(
+		"SELECT data FROM app_state WHERE state_key = $1",
+		["player_volume"],
+	);
+	if (rows.length === 0) return null;
+	try {
+		const parsed = JSON.parse(rows[0].data);
+		const volume = Number(parsed?.volume);
+		if (!Number.isFinite(volume)) return null;
+		return {
+			volume: Math.max(0, Math.min(100, Math.round(volume))),
+			isMuted: Boolean(parsed?.isMuted),
+		};
+	} catch {
+		return null;
+	}
+}
+
+export async function saveStoredPlayerVolume(volume, isMuted) {
+	const database = await getDatabase();
+	if (!database) return false;
+
+	await database.execute(
+		`INSERT INTO app_state (state_key, data)
+		 VALUES ($1, $2)
+		 ON CONFLICT(state_key) DO UPDATE SET data = excluded.data`,
+		["player_volume", JSON.stringify({ volume, isMuted: Boolean(isMuted) })],
+	);
+	return true;
+}
+
 export async function recordAppLog(level, source, message, details = null) {
 	try {
 		const database = await getDatabase();
