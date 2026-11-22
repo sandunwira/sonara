@@ -171,20 +171,20 @@ function Sidebar() {
 						<nav className="mt-1 flex flex-col space-y-0.5">
 							{playlists.map((playlist) => {
 								const path = `/playlists/${playlist.id}`;
-								const isActive =
-									location.pathname === path ||
-									location.pathname.startsWith(`${path}/`);
+								const isActive = location.pathname === path || location.pathname.startsWith(`${path}/`);
 								return (
-									<button
+									<div
 										key={playlist.id}
-										type="button"
-										onClick={() => handleNavClick(path)}
-										className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
+										className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition ${isActive
 											? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
 											: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
 											}`}
 									>
-										<div className="flex flex-row items-center flex-1 gap-2.5">
+										<button
+											type="button"
+											onClick={() => handleNavClick(path)}
+											className="flex min-w-0 flex-1 items-center gap-2.5 text-left cursor-pointer"
+										>
 											<IconPlaylist
 												size={14}
 												stroke={1.8}
@@ -195,9 +195,9 @@ function Sidebar() {
 												}
 											/>
 											<span className="block truncate">{playlist.name}</span>
-										</div>
+										</button>
 										<PlaylistOptionsMenu playlist={playlist} />
-									</button>
+									</div>
 								);
 							})}
 						</nav>

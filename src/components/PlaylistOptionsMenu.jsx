@@ -16,13 +16,15 @@ const MENU_ESTIMATED_HEIGHT = 90;
 const itemClass =
 	"flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white cursor-pointer";
 
-// Per-playlist options dropdown rendered inside the sidebar's playlist rows:
-// Rename and Delete (with a confirmation modal). Follows the TrackOptionsMenu
-// portal pattern — fixed viewport coordinates computed at open time, closes
-// on Escape / scroll / resize / click-away. The trigger is a clickable span,
-// not a button, because the row it lives in is itself a <button> (nested
-// buttons are invalid DOM); stopPropagation keeps the row from navigating
-// and keeps the collapsible from toggling.
+// Per-playlist options dropdown rendered alongside the sidebar's playlist
+// rows: Rename and Delete (with a confirmation modal). Follows the
+// TrackOptionsMenu portal pattern — fixed viewport coordinates computed at
+// open time, closes on Escape / scroll / resize / click-away. The sidebar
+// renders this as a SIBLING of the row's navigation button, so clicks inside
+// the portaled menu (including the click-away layer and modals) cannot bubble
+// through the React tree into that button and activate the playlist. The
+// trigger is a clickable span with explicit keyboard handling rather than a
+// second button next to the navigation one.
 export default function PlaylistOptionsMenu({ playlist }) {
 	const { session, bumpLibraryVersion } = useJellyfin();
 	const navigate = useNavigate();
