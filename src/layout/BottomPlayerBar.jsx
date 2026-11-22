@@ -11,6 +11,7 @@ import {
 	IconPictureInPicture,
 	IconDeviceSpeaker,
 	IconHeart,
+	IconHeartFilled,
 	IconVolume2,
 	IconVolume,
 	IconVolumeOff,
@@ -175,7 +176,7 @@ function CrossfadeControl() {
 				aria-label="Crossfade duration"
 				aria-expanded={isOpen}
 				title={isEnabled ? `Crossfade: ${formatCrossfade(crossfadeDuration)}` : "Crossfade off"}
-				className={`transition hover:scale-110 cursor-pointer ${isEnabled ? "text-blue-500" : "text-zinc-400 hover:text-white"}`}
+				className={`transition cursor-pointer ${isEnabled ? "text-blue-500 hover:text-blue-400" : "text-zinc-400 hover:text-white"}`}
 			>
 				<IconArrowsExchange size={14} stroke={1.8} />
 			</button>
@@ -363,7 +364,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						type="button"
 						onClick={toggleShuffle}
 						aria-label="Toggle shuffle"
-						className={`transition hover:scale-110 ${isShuffle ? "text-blue-500" : "text-zinc-400 hover:text-white"} cursor-pointer`}
+						className={`transition hover:scale-110 ${isShuffle ? "text-blue-500 hover:text-blue-400" : "text-zinc-400 hover:text-white"} cursor-pointer`}
 					>
 						<IconArrowsShuffle size={14} stroke={2} />
 					</button>
@@ -383,7 +384,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						type="button"
 						onClick={togglePlay}
 						aria-label={isPlaying ? "Pause" : "Play"}
-						className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-zinc-950 shadow-md transition hover:scale-105 active:scale-95 cursor-pointer"
+						className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-zinc-950 transition hover:scale-105 active:scale-95 cursor-pointer"
 					>
 						{isPlaying ? (
 							<IconPlayerPauseFilled size={13} />
@@ -408,7 +409,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 						onClick={toggleRepeat}
 						aria-label={repeatMode === "one" ? "Repeat: one track" : repeatMode === "all" ? "Repeat: all" : "Repeat: off"}
 						title={repeatMode === "one" ? "Repeating one track" : repeatMode === "all" ? "Repeating queue" : "Repeat off"}
-						className={`transition hover:scale-110 ${repeatMode !== "off" ? "text-blue-500" : "text-zinc-400 hover:text-white"} cursor-pointer`}
+						className={`transition hover:scale-110 ${repeatMode !== "off" ? "text-blue-500 hover:text-blue-400" : "text-zinc-400 hover:text-white"} cursor-pointer`}
 					>
 						{repeatMode === "one"
 							? <IconRepeatOnce size={14} stroke={2} />
@@ -431,7 +432,7 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 					onClick={toggleQueuePanel}
 					aria-label="View queue"
 					aria-expanded={isQueuePanelOpen}
-					className={`text-zinc-400 transition hover:text-white ${isQueuePanelOpen ? "text-white" : ""} cursor-pointer`}
+					className={`transition ${isQueuePanelOpen ? "text-blue-500 hover:text-blue-400" : "hover:text-white"} cursor-pointer`}
 				>
 					{isQueuePanelOpen ? (
 						<IconLayoutListFilled size={14} stroke={1.8} />
@@ -448,11 +449,11 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 					aria-label="Favorite"
 					className={`transition ${isFavorite ? "text-red-500 hover:text-red-400" : "hover:text-white"} cursor-pointer`}
 				>
-					<IconHeart
-						size={14}
-						stroke={1.8}
-						className={isFavorite ? "fill-red-500" : ""}
-					/>
+					{isFavorite ? (
+						<IconHeartFilled size={14} stroke={1.8} />
+					) : (
+						<IconHeart size={14} stroke={1.8} />
+					)}
 				</button>
 
 				{/* Volume control */}
