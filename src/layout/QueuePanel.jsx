@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Vibrant } from "node-vibrant/browser";
 import {
 	IconChevronDown,
 	IconChevronUp,
@@ -197,12 +198,47 @@ function QueuePanel({ isOpen, onClose }) {
 		clearQueue,
 		playQueueItem,
 	} = usePlayer();
+	const [accentRgb, setAccentRgb] = useState(null);
 
 	const upcomingStartIndex = Math.max(queueIndex + 1, 0);
 	const upcomingTracks = queue.slice(upcomingStartIndex);
 	// Album page for the current track, resolved exactly like the track
 	// options menu and the bottom player bar's artwork link.
 	const albumLink = currentTrack ? getTrackAlbumLink(currentTrack) : null;
+
+	useEffect(() => {
+		if (!isOpen || !currentTrack?.cover) {
+			if (!currentTrack?.cover) setAccentRgb(null);
+			return undefined;
+		}
+
+		let cancelled = false;
+		Vibrant.from(currentTrack.cover)
+			.getPalette()
+			.then((palette) => {
+				if (cancelled) return;
+				const swatch = palette.Vibrant
+					|| palette.DarkVibrant
+					|| palette.Muted
+					|| palette.DarkMuted;
+				setAccentRgb(swatch?.rgb || null);
+			})
+			.catch((error) => {
+				if (cancelled) return;
+				setAccentRgb(null);
+				console.error(`Failed to extract album color for track ${currentTrack.id}`, error);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [isOpen, currentTrack?.cover, currentTrack?.id]);
+
+	const backdropStyle = accentRgb
+		? {
+			backgroundImage: `radial-gradient(ellipse 140% 75% at 50% 0%, rgba(${accentRgb.join(", ")}, 0.3) 0%, rgba(${accentRgb.join(", ")}, 0.12) 45%, transparent 100%)`,
+		}
+		: undefined;
 
 	useEffect(() => {
 		if (!isOpen) return undefined;
@@ -223,7 +259,10 @@ function QueuePanel({ isOpen, onClose }) {
 				} ${isOpen ? "" : "pointer-events-none"}`}
 		>
 			{isOpen && (
-				<div className="flex h-full w-72 flex-col bg-[#0d0d10] text-zinc-200">
+				<div
+					className="flex h-full w-72 flex-col bg-[#0d0d10] text-zinc-200"
+					style={backdropStyle}
+				>
 					{/* Panel header */}
 					<header className="flex shrink-0 items-center justify-between px-4 py-3">
 						<h2 className="font-display text-base font-semibold text-white">Queue</h2>
@@ -250,25 +289,27 @@ function QueuePanel({ isOpen, onClose }) {
 							</p>
 							{currentTrack ? (
 								<div className="rounded-xs space-y-2">
-									<button
-										type="button"
-										onClick={() => {
-											if (!albumLink) return;
-											navigate(`/albums/${albumLink.id}`, {
-												state: { title: currentTrack.album || albumLink.title },
-											});
-										}}
-										disabled={!albumLink}
-										title="Go to album"
-										aria-label={albumLink ? `Go to album ${currentTrack.album || albumLink.title}` : undefined}
-										className="block w-full cursor-pointer rounded-sm bg-[#101014] border border-zinc-900 disabled:cursor-default"
-									>
-										<Artwork
-											src={currentTrack.cover}
-											alt={currentTrack.title}
-											className="rounded-sm aspect-square w-full object-cover"
-										/>
-									</button>
+									<div>
+										<button
+											type="button"
+											onClick={() => {
+												if (!albumLink) return;
+												navigate(`/albums/${albumLink.id}`, {
+													state: { title: currentTrack.album || albumLink.title },
+												});
+											}}
+											disabled={!albumLink}
+											title="Go to album"
+											aria-label={albumLink ? `Go to album ${currentTrack.album || albumLink.title}` : undefined}
+											className="block w-full cursor-pointer rounded-sm bg-[#101014] border border-zinc-900 disabled:cursor-default"
+										>
+											<Artwork
+												src={currentTrack.cover}
+												alt={currentTrack.title}
+												className="rounded-sm aspect-square w-full object-cover"
+											/>
+										</button>
+									</div>
 									<div>
 										<p
 											onClick={() => currentTrack?.id && navigate(`/tracks/${currentTrack.id}`, { state: { track: currentTrack } })}
