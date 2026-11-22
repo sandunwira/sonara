@@ -49,33 +49,44 @@ function ServerDropdown() {
 	const [isOpen, setIsOpen] = useState(false);
 	// Which server's action menu is open + its fixed placement, captured once at open time from the trigger's rect.
 	const [rowMenu, setRowMenu] = useState({ serverUrl: null, style: null });
-	const containerRef = useRef(null);
+	const rowMenuTriggerRef = useRef(null);
+	const rowMenuAnchorRef = useRef(null);
 
 	const closeRowMenu = useCallback(() => setRowMenu({ serverUrl: null, style: null }), []);
 
+	// The portal-rendered row menu floats free of the sidebar, so it only has
+	// to close when its trigger actually moves (sidebar scroll) or the window
+	// resizes. Watching every scroll event in the document made the menu close
+	// itself when an unrelated area (e.g. the page content while artwork
+	// loads) scrolled.
 	useEffect(() => {
-		if (!isOpen) return undefined;
-		const handlePointerDown = (event) => {
-			if (containerRef.current && !containerRef.current.contains(event.target)) {
-				setIsOpen(false);
+		if (!rowMenu.serverUrl) return undefined;
+		const handleScroll = () => {
+			const trigger = rowMenuTriggerRef.current;
+			const anchor = rowMenuAnchorRef.current;
+			if (!trigger || !trigger.isConnected || !anchor) {
+				closeRowMenu();
+				return;
+			}
+			const rect = trigger.getBoundingClientRect();
+			if (Math.abs(rect.top - anchor.top) > 1 || Math.abs(rect.right - anchor.right) > 1) {
 				closeRowMenu();
 			}
 		};
-		document.addEventListener("mousedown", handlePointerDown);
-		return () => document.removeEventListener("mousedown", handlePointerDown);
-	}, [isOpen, closeRowMenu]);
-
-	// The portal-rendered row menu floats free of the sidebar: close on any scroll or resize so it never detaches from its trigger.
-	useEffect(() => {
-		if (!rowMenu.serverUrl) return undefined;
-		const handleScroll = (event) => {
-			closeRowMenu();
+		const handleResize = () => closeRowMenu();
+		const handleKeyDown = (event) => {
+			if (event.key === "Escape") {
+				closeRowMenu();
+				event.stopPropagation();
+			}
 		};
 		document.addEventListener("scroll", handleScroll, true);
-		window.addEventListener("resize", closeRowMenu);
+		document.addEventListener("keydown", handleKeyDown, true);
+		window.addEventListener("resize", handleResize);
 		return () => {
 			document.removeEventListener("scroll", handleScroll, true);
-			document.removeEventListener("resize", closeRowMenu);
+			document.removeEventListener("keydown", handleKeyDown, true);
+			window.removeEventListener("resize", handleResize);
 		};
 	}, [rowMenu.serverUrl, closeRowMenu]);
 
@@ -112,10 +123,10 @@ function ServerDropdown() {
 		openServerModal();
 	};
 
-	const openRowMenu = (server) => {
-		const rect = document
-			.querySelector(`[data-server-menu-trigger="${server.serverUrl}"]`)
-			?.getBoundingClientRect();
+	const openRowMenu = (server, trigger) => {
+		const rect = trigger?.getBoundingClientRect();
+		rowMenuTriggerRef.current = trigger || null;
+		rowMenuAnchorRef.current = rect ? { top: rect.top, right: rect.right } : null;
 		if (!rect) {
 			setRowMenu({ serverUrl: server.serverUrl, style: { top: 8, right: 8 } });
 			return;
@@ -136,7 +147,7 @@ function ServerDropdown() {
 	};
 
 	return (
-		<div ref={containerRef}>
+		<div>
 			{/* Group header */}
 			<button
 				type="button"
@@ -180,16 +191,21 @@ function ServerDropdown() {
 						const isActive = normalizeServerUrl(server.serverUrl) === activeServerUrl;
 						const menuOpen = rowMenu.serverUrl === server.serverUrl;
 						return (
-							<button
+							// The options trigger is a sibling of the navigation
+							// button (not a nested control), so opening its
+							// portaled menu cannot activate the row.
+							<div
 								key={server.serverUrl}
-								type="button"
-								onClick={() => handleSelect(server)}
-								className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition cursor-pointer ${isActive
+								className={`group flex w-full items-center gap-2.5 rounded-xs px-2 py-1.5 text-xs font-medium transition ${isActive
 									? "text-blue-500 font-semibold hover:bg-[#1a1a22]"
 									: "text-zinc-300 hover:bg-[#1a1a22] hover:text-white"
 									}`}
 							>
-								<span className="flex-1 flex flex-row items-center gap-2.5">
+								<button
+									type="button"
+									onClick={() => handleSelect(server)}
+									className="flex min-w-0 flex-1 items-center gap-2.5 text-left cursor-pointer"
+								>
 									{isActive ? (
 										<ConnectionStatusIcon />
 									) : (
@@ -204,34 +220,23 @@ function ServerDropdown() {
 										/>
 									)}
 									<span className="block truncate">{server.serverName || server.serverUrl}</span>
-								</span>
-								{/* Clickable span whose click stops propagation so the actions menu opens without selecting the server. */}
-								<span
-									role="button"
-									tabIndex={0}
-									data-server-menu-trigger={server.serverUrl}
+								</button>
+								<button
+									type="button"
 									aria-label={`Actions for ${server.serverName || server.serverUrl}`}
 									aria-expanded={menuOpen}
+									aria-haspopup="menu"
 									title="Server actions"
 									onClick={(event) => {
 										event.stopPropagation();
 										if (menuOpen) closeRowMenu();
-										else openRowMenu(server);
-									}}
-									onKeyDown={(event) => {
-										if (event.key === "Enter" || event.key === " ") {
-											// Keep the row's own keyboard activation from firing.
-											event.preventDefault();
-											event.stopPropagation();
-											if (menuOpen) closeRowMenu();
-											else openRowMenu(server);
-										}
+										else openRowMenu(server, event.currentTarget);
 									}}
 									className="shrink-0 cursor-pointer rounded-xs p-0.5 text-zinc-500 opacity-0 transition group-hover:opacity-100 hover:text-white focus:opacity-100 focus:outline-none focus-visible:text-white"
 								>
 									<IconDotsVertical size={12} stroke={1.8} />
-								</span>
-							</button>
+								</button>
+							</div>
 						);
 					});
 				})()}
@@ -252,7 +257,7 @@ function ServerDropdown() {
 				)}
 			</nav>
 
-			{/* Per-server actions menu - portal, styled like the playlist options menu. Trigger lookup relies on the row keeping its data attribute while the menu is open. */}
+			{/* Per-server actions menu - portal, styled like the playlist options menu. Placement is captured from the trigger button when the menu opens. */}
 			{rowMenu.serverUrl && createPortal(
 				<>
 					{/* Click-away layer sits above the page but below the menu */}
