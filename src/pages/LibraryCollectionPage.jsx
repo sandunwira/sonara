@@ -23,13 +23,11 @@ function formatDuration(seconds) {
 	return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-// Track tables render incrementally: the first screenful is painted
+// Large collections render incrementally: the first screenful is painted
 // immediately and another chunk is appended whenever the sentinel below the
-// list scrolls into view. Mounting all 3,000 rows at once was the main reason
-// opening the Tracks page felt slow; search/queue actions still use the full
-// (unrendered) item list.
-const INITIAL_TRACK_ROWS = 100;
-const TRACK_ROW_CHUNK = 250;
+// list or grid scrolls into view. Search/queue actions still use the full list.
+const INITIAL_RENDERED_ITEMS = 100;
+const RENDER_CHUNK = 250;
 
 // One row of the track table. Memoized so play/pause or a track change only
 // re-renders the affected row instead of every row in a 3,000-track library.
@@ -274,16 +272,15 @@ export default function LibraryCollectionPage({
 		);
 	}, [items, search]);
 
-	// Incremental row rendering for long track tables (see constants above).
-	const [renderedCount, setRenderedCount] = useState(INITIAL_TRACK_ROWS);
+	// Incremental rendering for long tables and entity grids (see constants above).
+	const [renderedCount, setRenderedCount] = useState(INITIAL_RENDERED_ITEMS);
 	const loadMoreRef = useRef(null);
 	const renderedItems = useMemo(
 		() => visibleItems.slice(0, renderedCount),
 		[visibleItems, renderedCount],
 	);
-
 	useEffect(() => {
-		setRenderedCount(INITIAL_TRACK_ROWS);
+		setRenderedCount(INITIAL_RENDERED_ITEMS);
 	}, [items, search]);
 
 	useEffect(() => {
@@ -291,16 +288,16 @@ export default function LibraryCollectionPage({
 		const node = loadMoreRef.current;
 		if (!node) return undefined;
 		// Scroll container is the layout's <main>; observing against it keeps
-		// the trigger accurate wherever this table is used.
+		// the trigger accurate wherever this table or grid is used.
 		const root = node.closest("main");
 		const observer = new IntersectionObserver((entries) => {
 			if (entries.some((entry) => entry.isIntersecting)) {
-				setRenderedCount((count) => Math.min(count + TRACK_ROW_CHUNK, visibleItems.length));
+				setRenderedCount((count) => Math.min(count + RENDER_CHUNK, visibleItems.length));
 			}
 		}, { root, rootMargin: "600px 0px" });
 		observer.observe(node);
 		return () => observer.disconnect();
-	}, [renderedCount, visibleItems.length]);
+	}, [items, renderedCount, visibleItems.length]);
 
 	const pageTitle = detailId ? detailTitle || title.slice(0, -1) : title;
 	const playFromList = (track) => {
@@ -416,8 +413,9 @@ export default function LibraryCollectionPage({
 				</div>
 			) : entityList && !detailId ? (
 				genreCards ? (
-					<div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-						{visibleItems.map((genre) => {
+					<>
+						<div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+							{renderedItems.map((genre) => {
 							const nameKey = String(genre.name || "").toLowerCase();
 							const isPending = pendingGenreIds?.has(genre.id) || false;
 							const isCurrentGenre = currentGenreNames?.has(nameKey) || false;
@@ -458,10 +456,15 @@ export default function LibraryCollectionPage({
 								</div>
 							);
 						})}
-					</div>
+						</div>
+						{renderedCount < visibleItems.length && (
+							<div ref={loadMoreRef} className="h-px w-full" aria-hidden="true" />
+						)}
+					</>
 				) : (
-					<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-						{visibleItems.map((item) => (
+					<>
+						<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+							{renderedItems.map((item) => (
 							<div
 								key={item.id}
 								role="button"
@@ -491,8 +494,12 @@ export default function LibraryCollectionPage({
 									</span>
 								</div>
 							</div>
-						))}
-					</div>
+							))}
+						</div>
+						{renderedCount < visibleItems.length && (
+							<div ref={loadMoreRef} className="h-px w-full" aria-hidden="true" />
+						)}
+					</>
 				)
 			) : (
 				<>
