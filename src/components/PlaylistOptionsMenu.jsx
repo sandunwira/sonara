@@ -2,22 +2,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { IconDotsVertical, IconEdit, IconTrash } from "@tabler/icons-react";
+import { IconDotsVertical, IconEdit, IconPlayerPlayFilled, IconTrash } from "@tabler/icons-react";
 import { useJellyfin } from "../context/JellyfinContext";
-import { deleteJellyfinItem, renameJellyfinItem } from "../services/jellyfin";
-import { invalidateJellyfinPlaylistEntries } from "../services/jellyfinCache";
+import { usePlayer } from "../context/PlayerContext";
+import { deleteJellyfinItem, fetchMusicCollection, renameJellyfinItem } from "../services/jellyfin";
+import { invalidateJellyfinPlaylistEntries, recordAppLog } from "../services/jellyfinCache";
 import PlaylistNameModal from "./modals/PlaylistNameModal";
 import ConfirmModal from "./modals/ConfirmModal";
 
 const MENU_WIDTH = "w-44";
-// Roughly the tallest the menu gets (2 items); used for the flip-up check.
-const MENU_ESTIMATED_HEIGHT = 90;
+// Roughly the tallest the menu gets (3 items); used for the flip-up check.
+const MENU_ESTIMATED_HEIGHT = 130;
 
 const itemClass =
 	"flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-zinc-200 transition hover:bg-white/5 hover:text-white cursor-pointer";
 
 // Per-playlist options dropdown rendered alongside the sidebar's playlist
-// rows: Rename and Delete (with a confirmation modal). Follows the
+// rows: Play, Rename and Delete (with a confirmation modal). Follows the
 // TrackOptionsMenu portal pattern — fixed viewport coordinates computed at
 // open time, closes on Escape / scroll / resize / click-away. The sidebar
 // renders this as a SIBLING of the row's navigation button, so clicks inside
@@ -27,6 +28,7 @@ const itemClass =
 // second button next to the navigation one.
 export default function PlaylistOptionsMenu({ playlist }) {
 	const { session, bumpLibraryVersion } = useJellyfin();
+	const { playTrack, setPlaybackSource } = usePlayer();
 	const navigate = useNavigate();
 	const location = useLocation();
 
@@ -93,6 +95,39 @@ export default function PlaylistOptionsMenu({ playlist }) {
 	const invalidateAndBump = async () => {
 		await invalidateJellyfinPlaylistEntries(playlist.id);
 		bumpLibraryVersion();
+	};
+
+	// Plays the playlist from the first track, exactly like the playlist
+	// page's "Play all" button: the tracks are fetched through the shared
+	// response cache and stamped as this playlist's playback source so the
+	// detail page's play/pause state stays correct.
+	const handlePlay = async () => {
+		closeMenu();
+		if (!session?.serverUrl || !session?.userId || !session?.accessToken) {
+			toast.error("Connect to a Jellyfin server first");
+			return;
+		}
+		try {
+			const tracks = await fetchMusicCollection(
+				session.serverUrl,
+				session.userId,
+				session.accessToken,
+				{ parentId: playlist.id },
+			);
+			if (tracks.length === 0) {
+				toast.error(`"${playlist.name}" is empty`);
+				return;
+			}
+			playTrack(tracks[0], tracks);
+			setPlaybackSource({ type: "collection", id: playlist.id, name: playlist.name });
+		} catch (error) {
+			console.error(`Could not play playlist "${playlist.name}":`, error);
+			recordAppLog("error", "jellyfin-playback", `Could not play playlist "${playlist.name}"`, {
+				message: error.message,
+				playlistId: playlist.id,
+			});
+			toast.error(`Could not play "${playlist.name}"`);
+		}
 	};
 
 	const handleRename = async (name) => {
@@ -188,6 +223,15 @@ export default function PlaylistOptionsMenu({ playlist }) {
 						style={placement?.style}
 						className={`fixed z-50 ${MENU_WIDTH} rounded-xs border border-[#2b2b36] bg-[#18181f] py-1 shadow-xl`}
 					>
+						<button
+							type="button"
+							onClick={handlePlay}
+							className={itemClass}
+						>
+							<IconPlayerPlayFilled size={14} stroke={1.8} />
+							Play
+						</button>
+						<div className="my-1 border-t border-[#2b2b36]" />
 						<button
 							type="button"
 							onClick={() => {
