@@ -104,7 +104,7 @@ function Lyrics({ track, onSeek }) {
 
 	const lyricLineClass = (index) => {
 		if (index === activeLyricIndex) return "text-sm font-semibold text-white";
-		if (index < activeLyricIndex) return "text-xs text-zinc-600 hover:text-zinc-400";
+		if (index < activeLyricIndex) return "text-xs text-zinc-500 hover:text-zinc-400";
 		return "text-xs text-zinc-500 hover:text-zinc-300";
 	};
 
@@ -120,7 +120,7 @@ function Lyrics({ track, onSeek }) {
 				aria-expanded={isOpen}
 				className="flex w-full items-center justify-between py-1.5 cursor-pointer"
 			>
-				<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+				<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
 					Lyrics
 				</p>
 				<IconChevronDown
@@ -137,7 +137,7 @@ function Lyrics({ track, onSeek }) {
 							onWheel={() => {
 								userScrollUntilRef.current = Date.now() + 4000;
 							}}
-							className="relative max-h-36 overflow-y-auto overscroll-none pr-1 p-3 leading-loose rounded-xs bg-[#101014] border border-zinc-900"
+							className="relative max-h-36 overflow-y-auto overscroll-none pr-1 p-3 leading-loose rounded-xs bg-[#101014]/40 border border-zinc-800"
 						>
 							{lines.synced.map((line, index) => (
 								line.text ? (
@@ -170,7 +170,7 @@ function Lyrics({ track, onSeek }) {
 						</p>
 					)}
 					{!lines && (
-						<p className="text-[10px] text-zinc-600">
+						<p className="text-[10px] text-zinc-400">
 							{lines === undefined ? "Finding lyrics…" : "No lyrics available for this track."}
 						</p>
 					)}
@@ -267,7 +267,7 @@ function QueuePanel({ isOpen, onClose }) {
 					<header className="flex shrink-0 items-center justify-between px-4 py-3">
 						<h2 className="font-display text-base font-semibold text-white">Queue</h2>
 						<div className="flex items-center gap-2">
-							<p className="text-[10px] font-semibold text-zinc-400">
+							<p className="text-[10px] font-semibold text-zinc-300">
 								{queueIndex + 1}/{queue.length}
 							</p>
 							<button
@@ -284,7 +284,7 @@ function QueuePanel({ isOpen, onClose }) {
 					<div className="flex-1 overflow-y-auto overscroll-none space-y-8 px-4 pb-4">
 						{/* Now playing preview */}
 						<div className="space-y-2">
-							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
 								Now Playing
 							</p>
 							{currentTrack ? (
@@ -301,7 +301,7 @@ function QueuePanel({ isOpen, onClose }) {
 											disabled={!albumLink}
 											title="Go to album"
 											aria-label={albumLink ? `Go to album ${currentTrack.album || albumLink.title}` : undefined}
-											className="block w-full cursor-pointer rounded-sm bg-[#101014] border border-zinc-900 disabled:cursor-default"
+											className="block w-full cursor-pointer rounded-sm bg-[#101014] border border-zinc-800 disabled:cursor-default"
 										>
 											<Artwork
 												src={currentTrack.cover}
@@ -336,7 +336,7 @@ function QueuePanel({ isOpen, onClose }) {
 									<span className="text-xs font-medium text-zinc-400">
 										No track playing
 									</span>
-									<span className="mt-0.5 text-[10px] text-zinc-600">
+									<span className="mt-0.5 text-[10px] text-zinc-400">
 										Select a song to play
 									</span>
 								</div>
@@ -349,7 +349,7 @@ function QueuePanel({ isOpen, onClose }) {
 						{/* Upcoming tracks */}
 						<div className="space-y-2">
 							<div className="flex items-center justify-between">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
 									Up Next
 								</p>
 								<button
@@ -358,14 +358,14 @@ function QueuePanel({ isOpen, onClose }) {
 									disabled={upcomingTracks.length === 0}
 									title="Clear upcoming tracks"
 									aria-label="Clear upcoming tracks"
-									className="flex items-center gap-1 uppercase rounded-xs px-2 py-1 text-[10px] text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+									className="flex items-center gap-1 uppercase rounded-xs px-2 py-1 text-[10px] text-zinc-300 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
 								>
 									<IconTrash size={10} stroke={1.5} />
 									Clear
 								</button>
 							</div>
 							{upcomingTracks.length === 0 ? (
-								<p className="px-2 py-4 text-center text-xs text-zinc-500">
+								<p className="px-2 py-4 text-center text-xs text-zinc-400">
 									No tracks in the queue
 								</p>
 							) : (
@@ -392,7 +392,7 @@ function QueuePanel({ isOpen, onClose }) {
 														<span className="block truncate text-xs font-medium text-zinc-200">
 															{track.title}
 														</span>
-														<span className="block truncate text-[11px] text-zinc-500">
+														<span className="block truncate text-[11px] text-zinc-400">
 															{track.artist}
 														</span>
 													</span>
