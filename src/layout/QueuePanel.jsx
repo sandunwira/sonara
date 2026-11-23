@@ -112,6 +112,8 @@ function Lyrics({ track, onSeek }) {
 	// Nothing to attach lyrics to.
 	if (!track) return null;
 
+	if (!lines || lines === undefined) return null;
+
 	return (
 		<div>
 			{/* Collapsible header, same pattern as the sidebar sections. */}
