@@ -222,7 +222,13 @@ function CrossfadeControl() {
 	);
 }
 
-function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueuePanel }) {
+function BottomPlayerBar({
+	onTrackOptions,
+	isQueuePanelOpen = false,
+	toggleQueuePanel,
+	isNowPlayingPanelOpen = false,
+	toggleNowPlayingPanel,
+}) {
 	const {
 		currentTrack,
 		isPlaying,
@@ -426,12 +432,25 @@ function BottomPlayerBar({ onTrackOptions, isQueuePanelOpen = false, toggleQueue
 				{/* Crossfade duration */}
 				<CrossfadeControl />
 
-				{/* Playlist / Queue - toggles the collapsible right panel */}
+				{/* Current-track details */}
+				<button
+					type="button"
+					onClick={toggleNowPlayingPanel}
+					aria-label="View now playing details"
+					aria-expanded={isNowPlayingPanelOpen}
+					title="Now playing details"
+					className={`transition ${isNowPlayingPanelOpen ? "text-blue-500 hover:text-blue-400" : "hover:text-white"} cursor-pointer`}
+				>
+					<IconMusic size={14} stroke={1.8} />
+				</button>
+
+				{/* Queue management */}
 				<button
 					type="button"
 					onClick={toggleQueuePanel}
 					aria-label="View queue"
 					aria-expanded={isQueuePanelOpen}
+					title="Queue"
 					className={`transition ${isQueuePanelOpen ? "text-blue-500 hover:text-blue-400" : "hover:text-white"} cursor-pointer`}
 				>
 					{isQueuePanelOpen ? (

@@ -2,10 +2,14 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import BottomPlayerBar from "./BottomPlayerBar";
-import QueuePanel from "./QueuePanel";
+import NowPlayingPanel from "./NowPlayingPanel";
+import QueueManagementPanel from "./QueueManagementPanel";
 
 export default function MainLayout() {
-	const [isQueuePanelOpen, setIsQueuePanelOpen] = useState(false);
+	const [activePanel, setActivePanel] = useState(null);
+	const isQueuePanelOpen = activePanel === "queue";
+	const isNowPlayingPanelOpen = activePanel === "nowPlaying";
+	const isSidePanelOpen = activePanel !== null;
 
 	return (
 		<div className="flex h-full w-full flex-col bg-[#0c0c0e] text-zinc-100">
@@ -16,13 +20,16 @@ export default function MainLayout() {
 
 				{/* Scrollable Page Content */}
 				<main className="flex-1 overflow-y-auto overscroll-none bg-[#0a0a0d] p-7 pt-0">
-					<Outlet context={{ isQueuePanelOpen }} />
+					<Outlet context={{ isSidePanelOpen }} />
 				</main>
 
-				{/* Collapsible right panel: now playing preview + queue */}
-				<QueuePanel
+				<NowPlayingPanel
+					isOpen={isNowPlayingPanelOpen}
+					onClose={() => setActivePanel(null)}
+				/>
+				<QueueManagementPanel
 					isOpen={isQueuePanelOpen}
-					onClose={() => setIsQueuePanelOpen(false)}
+					onClose={() => setActivePanel(null)}
 				/>
 			</div>
 
@@ -30,7 +37,9 @@ export default function MainLayout() {
 			<BottomPlayerBar
 				onTrackOptions={() => console.log("Track options clicked")}
 				isQueuePanelOpen={isQueuePanelOpen}
-				toggleQueuePanel={() => setIsQueuePanelOpen((open) => !open)}
+				toggleQueuePanel={() => setActivePanel((active) => active === "queue" ? null : "queue")}
+				isNowPlayingPanelOpen={isNowPlayingPanelOpen}
+				toggleNowPlayingPanel={() => setActivePanel((active) => active === "nowPlaying" ? null : "nowPlaying")}
 			/>
 		</div>
 	);

@@ -3,16 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Vibrant } from "node-vibrant/browser";
 import {
 	IconChevronDown,
-	IconChevronUp,
 	IconMusic,
-	IconTrash,
 	IconX,
 } from "@tabler/icons-react";
 import { usePlayer, subscribePlayerProgress, getPlayerProgress } from "../context/PlayerContext";
 import Artwork from "../components/Artwork";
 import ArtistProfile from "../components/ArtistProfile";
 import { fetchLyrics } from "../services/lyrics";
-import { getThumbnailUrl, getTrackArtistLink, getTrackAlbumLink } from "../services/jellyfin";
+import { getTrackArtistLink, getTrackAlbumLink } from "../services/jellyfin";
 
 // Index of the lyric line being sung at `currentTime` (a small offset
 // compensates for latency).
@@ -172,28 +170,13 @@ function Lyrics({ track, onSeek }) {
 	);
 }
 
-// Collapsible right-side panel with a now-playing preview, lyrics for the
-// current track (when LRCLIB has any) and the queue. The wrapper animates its
-// width so the panel slides open/closed without shifting the window controls,
-// and it is fully closable from its own X and Escape, or via the queue toggle
-// in the bottom player bar. The body only mounts while open: a restored
-// 300+ track queue would otherwise build a hidden list at startup.
-function QueuePanel({ isOpen, onClose }) {
+// Right-side panel with details for the current track. The wrapper animates
+// its width and the body only mounts while open.
+function NowPlayingPanel({ isOpen, onClose }) {
 	const navigate = useNavigate();
-	const {
-		currentTrack,
-		seek,
-		queue,
-		queueIndex,
-		removeQueuedTrack,
-		moveQueuedTrack,
-		clearQueue,
-		playQueueItem,
-	} = usePlayer();
+	const { currentTrack, seek } = usePlayer();
 	const [accentRgb, setAccentRgb] = useState(null);
 
-	const upcomingStartIndex = Math.max(queueIndex + 1, 0);
-	const upcomingTracks = queue.slice(upcomingStartIndex);
 	// Album page for the current track, resolved exactly like the track
 	// options menu and the bottom player bar's artwork link.
 	const albumLink = currentTrack ? getTrackAlbumLink(currentTrack) : null;
@@ -243,7 +226,7 @@ function QueuePanel({ isOpen, onClose }) {
 
 	return (
 		<section
-			aria-label="Playback queue"
+			aria-label="Now playing details"
 			aria-hidden={!isOpen}
 			className={`h-full shrink-0 overflow-hidden border-l bg-[#0d0d10] transition-all duration-300 ease-out ${isOpen
 				? "w-72 border-[#1b1b22] opacity-100"
@@ -257,28 +240,20 @@ function QueuePanel({ isOpen, onClose }) {
 				>
 					{/* Panel header */}
 					<header className="flex shrink-0 items-center justify-between px-4 py-3">
-						<h2 className="font-display text-base font-semibold text-white">Queue</h2>
-						<div className="flex items-center gap-2">
-							<p className="text-[10px] font-semibold text-zinc-300">
-								{queueIndex + 1}/{queue.length}
-							</p>
-							<button
-								type="button"
-								onClick={onClose}
-								aria-label="Close queue panel"
-								className="rounded-xs p-1 text-zinc-400 transition hover:bg-white/5 hover:text-white"
-							>
-								<IconX size={15} />
-							</button>
-						</div>
+						<h2 className="font-display text-base font-semibold text-white">Now Playing</h2>
+						<button
+							type="button"
+							onClick={onClose}
+							aria-label="Close now playing panel"
+							className="rounded-xs p-1 text-zinc-400 transition hover:bg-white/5 hover:text-white"
+						>
+							<IconX size={15} />
+						</button>
 					</header>
 
 					<div className="flex-1 overflow-y-auto overscroll-none space-y-8 px-4 pb-4">
 						{/* Now playing preview */}
 						<div className="space-y-2">
-							<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
-								Now Playing
-							</p>
 							{currentTrack ? (
 								<div className="rounded-xs space-y-2">
 									<div>
@@ -335,7 +310,7 @@ function QueuePanel({ isOpen, onClose }) {
 							)}
 						</div>
 
-						{/* Lyrics, collapsible and collapsed by default (nothing is fetched or followed until it is expanded) */}
+						{/* Lyrics are shown only when available and followed while expanded. */}
 						<Lyrics track={currentTrack} onSeek={seek} />
 
 						{/* Artist profile from YouTube Music, compact and display-only */}
@@ -346,91 +321,6 @@ function QueuePanel({ isOpen, onClose }) {
 							/>
 						)}
 
-						{/* Upcoming tracks */}
-						<div className="space-y-2">
-							<div className="flex items-center justify-between">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
-									Up Next
-								</p>
-								<button
-									type="button"
-									onClick={clearQueue}
-									disabled={upcomingTracks.length === 0}
-									title="Clear upcoming tracks"
-									aria-label="Clear upcoming tracks"
-									className="flex items-center gap-1 uppercase rounded-xs px-2 py-1 text-[10px] text-zinc-300 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-								>
-									<IconTrash size={10} stroke={1.5} />
-									Clear
-								</button>
-							</div>
-							{upcomingTracks.length === 0 ? (
-								<p className="px-2 py-4 text-center text-xs text-zinc-400">
-									No tracks in the queue
-								</p>
-							) : (
-								<ul className="space-y-1">
-									{upcomingTracks.map((track, offset) => {
-										const index = upcomingStartIndex + offset;
-										return (
-											<li
-												key={`${track.id}-${index}`}
-												className="queue-row group flex items-center gap-2 rounded-xs px-2 py-2 hover:bg-white/5"
-											>
-												<button
-													type="button"
-													onClick={() => playQueueItem(index)}
-													aria-label={`Play ${track.title}`}
-													className="flex min-w-0 flex-1 items-center gap-3 text-left"
-												>
-													<Artwork
-														src={track.cover ? getThumbnailUrl(track.cover, 96) : track.cover}
-														alt=""
-														className="h-9 w-9 shrink-0 rounded-xs object-cover"
-													/>
-													<span className="min-w-0 flex-1">
-														<span className="block truncate text-xs font-medium text-zinc-200">
-															{track.title}
-														</span>
-														<span className="block truncate text-[11px] text-zinc-400">
-															{track.artist}
-														</span>
-													</span>
-												</button>
-												<div className="flex shrink-0 items-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
-													<button
-														type="button"
-														onClick={() => moveQueuedTrack(index, index - 1)}
-														disabled={offset === 0}
-														aria-label={`Move ${track.title} up`}
-														className="rounded-xs p-1 text-zinc-400 hover:text-white disabled:opacity-30"
-													>
-														<IconChevronUp size={14} />
-													</button>
-													<button
-														type="button"
-														onClick={() => moveQueuedTrack(index, index + 1)}
-														disabled={offset === upcomingTracks.length - 1}
-														aria-label={`Move ${track.title} down`}
-														className="rounded-xs p-1 text-zinc-400 hover:text-white disabled:opacity-30"
-													>
-														<IconChevronDown size={14} />
-													</button>
-													<button
-														type="button"
-														onClick={() => removeQueuedTrack(index)}
-														aria-label={`Remove ${track.title} from queue`}
-														className="rounded-xs p-1 text-zinc-500 hover:text-red-400"
-													>
-														<IconX size={14} />
-													</button>
-												</div>
-											</li>
-										);
-									})}
-								</ul>
-							)}
-						</div>
 					</div>
 				</div>
 			)}
@@ -438,4 +328,4 @@ function QueuePanel({ isOpen, onClose }) {
 	);
 }
 
-export default QueuePanel;
+export default NowPlayingPanel;

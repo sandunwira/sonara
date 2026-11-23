@@ -8,7 +8,7 @@ import useGenrePlayback from "../hooks/useGenrePlayback";
 
 function HomePage() {
 	const navigate = useNavigate();
-	const { isQueuePanelOpen = false } = useOutletContext() || {};
+	const { isSidePanelOpen = false } = useOutletContext() || {};
 	const { currentTrack, playTrack, playNext, playLast } = usePlayer();
 	const {
 		isAuthenticated,
@@ -84,7 +84,7 @@ function HomePage() {
 					items={tracks}
 					onRefresh={refreshMostPlayed}
 					isRefreshing={isRefreshingMostPlayed}
-					compact={isQueuePanelOpen}
+					compact={isSidePanelOpen}
 					currentPlayingId={currentTrack?.id}
 					isPlaying={isPlaying}
 					onPlayItem={(item) => playFromSection(item, tracks)}
@@ -102,7 +102,7 @@ function HomePage() {
 					items={recentlyPlayed}
 					onRefresh={refreshRecentlyPlayed}
 					isRefreshing={isRefreshingRecentlyPlayed}
-					compact={isQueuePanelOpen}
+					compact={isSidePanelOpen}
 					currentPlayingId={currentTrack?.id}
 					isPlaying={isPlaying}
 					onPlayItem={(item) => playFromSection(item, recentlyPlayed)}
