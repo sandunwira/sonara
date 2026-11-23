@@ -27,11 +27,8 @@ function findActiveLyricIndex(synced, currentTime) {
 }
 
 // Lyrics for the current track (LRCLIB, persisted in the local database).
-// Collapsible like the sidebar sections and collapsed by default: while it
-// stays closed nothing is fetched, no playback-position subscription is
-// active and nothing renders. Playback position is read imperatively instead
-// of through usePlayerProgress, so even when expanded the highlight only
-// re-renders when a new line starts (no work on ordinary 4x/second ticks).
+// The lookup runs per track so the section can be omitted when no lyrics are
+// available. Playback position is followed only while expanded.
 function Lyrics({ track, onSeek }) {
 	const [isOpen, setIsOpen] = useState(false);
 	// { trackId, lines }: tagged with its track so lyrics resolved for a
@@ -50,10 +47,9 @@ function Lyrics({ track, onSeek }) {
 	const lines = lyrics && lyrics.trackId === track?.id ? lyrics.lines : undefined;
 	lyricsRef.current = lines;
 
-	// Only fetch while expanded. Results are cached in memory and in the
-	// local database, so reopening the section does not hit the network.
+	// Results are cached in memory and in the local database, so revisiting a
+	// track does not hit the network.
 	useEffect(() => {
-		if (!isOpen) return undefined;
 		const trackId = track?.id ?? null;
 		if (!track?.title || !track?.artist) {
 			setLyrics({ trackId, lines: null });
@@ -69,7 +65,7 @@ function Lyrics({ track, onSeek }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [isOpen, track?.id, track?.title, track?.artist]);
+	}, [track?.id, track?.title, track?.artist]);
 
 	// Follow the playback position while expanded: progress ticks ~4x/second
 	// but the highlight changes only when a line starts, and setState bails
@@ -109,8 +105,8 @@ function Lyrics({ track, onSeek }) {
 		return "text-xs text-zinc-500 hover:text-zinc-300";
 	};
 
-	// Nothing to attach lyrics to.
-	if (!track) return null;
+	// Hide the section until usable lyrics are available.
+	if (!track || (!lines?.synced?.length && !lines?.plain)) return null;
 
 	return (
 		<div>
@@ -168,11 +164,6 @@ function Lyrics({ track, onSeek }) {
 					{lines?.plain && (
 						<p className="rounded-xs border border-[#22222a] bg-[#141419] px-3 py-2 whitespace-pre-line text-xs leading-relaxed text-zinc-400">
 							{lines.plain}
-						</p>
-					)}
-					{!lines && (
-						<p className="text-[10px] text-zinc-400">
-							{lines === undefined ? "Finding lyrics…" : "No lyrics available for this track."}
 						</p>
 					)}
 				</div>
