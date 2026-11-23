@@ -24,6 +24,7 @@ import {
 	recordAppLog,
 	saveStoredJellyfinSession,
 } from "../services/jellyfinCache";
+import { preloadMissingArtistImages } from "../services/artistImagePreloader";
 
 const JellyfinContext = createContext();
 
@@ -196,6 +197,26 @@ export function JellyfinProvider({ children }) {
 			messages[connectionStatus] || "Connection status changed",
 		);
 	}, [connectionStatus]);
+
+	// Artist image preloading starts after the main session/library work and
+	// runs independently; changing servers or going offline cancels the queue.
+	useEffect(() => {
+		if (!isSessionLoaded || !session || isOffline || connectionStatus === "offline") {
+			return undefined;
+		}
+
+		let cancelled = false;
+		const timeoutId = setTimeout(() => {
+			preloadMissingArtistImages(session, () => cancelled).catch((error) => {
+				console.warn("Could not preload Jellyfin artist images:", error);
+			});
+		}, 10000);
+
+		return () => {
+			cancelled = true;
+			clearTimeout(timeoutId);
+		};
+	}, [connectionStatus === "offline", isOffline, isSessionLoaded, session]);
 
 	// Load user music when authenticated
 	const loadLibrary = useCallback(async (currentSession = session, { forceRefresh = false } = {}) => {

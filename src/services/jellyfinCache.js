@@ -584,6 +584,53 @@ export async function saveStoredLyrics(artist, title, lyrics) {
 	);
 }
 
+// ---- YouTube Music artist cache (artist profiles, persisted for offline use) ----
+
+function artistCacheKey(artist) {
+	const key = String(artist || "")
+		.trim()
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "");
+	return key || null;
+}
+
+// Returns the stored normalized artist profile, or undefined when nothing is
+// stored for that artist yet.
+export async function getStoredYtMusicArtist(artist) {
+	const key = artistCacheKey(artist);
+	if (!key) return undefined;
+	const database = await getDatabase();
+	if (!database) return undefined;
+
+	const rows = await database.select(
+		"SELECT data FROM ytmusic_artists WHERE artist_key = $1",
+		[key],
+	);
+	if (rows.length === 0) return undefined;
+	try {
+		return JSON.parse(rows[0].data);
+	} catch {
+		return undefined;
+	}
+}
+
+export async function saveStoredYtMusicArtist(artist, profile) {
+	const key = artistCacheKey(artist);
+	if (!key) return;
+	const database = await getDatabase();
+	if (!database) {
+		throw new Error("Artist storage requires the Sonara desktop app");
+	}
+
+	await database.execute(
+		`INSERT INTO ytmusic_artists (artist_key, data, fetched_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT(artist_key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
+		[key, JSON.stringify(profile), new Date().toISOString()],
+	);
+}
+
 // Locally generated library collage thumbnails (square JPEG data URLs). These live only in the app database and are never pushed to Jellyfin.
 export async function getStoredLibraryThumbnails() {
 	const database = await getDatabase();

@@ -10,6 +10,7 @@ import {
 } from "@tabler/icons-react";
 import { usePlayer, subscribePlayerProgress, getPlayerProgress } from "../context/PlayerContext";
 import Artwork from "../components/Artwork";
+import ArtistProfile from "../components/ArtistProfile";
 import { fetchLyrics } from "../services/lyrics";
 import { getThumbnailUrl, getTrackArtistLink, getTrackAlbumLink } from "../services/jellyfin";
 
@@ -345,6 +346,14 @@ function QueuePanel({ isOpen, onClose }) {
 
 						{/* Lyrics, collapsible and collapsed by default (nothing is fetched or followed until it is expanded) */}
 						<Lyrics track={currentTrack} onSeek={seek} />
+
+						{/* Artist profile from YouTube Music, compact and display-only */}
+						{currentTrack && (
+							<ArtistProfile
+								artist={currentTrack.artist}
+								artistItems={currentTrack.raw?.ArtistItems}
+							/>
+						)}
 
 						{/* Upcoming tracks */}
 						<div className="space-y-2">

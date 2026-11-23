@@ -111,6 +111,16 @@ pub fn run() {
         CREATE INDEX IF NOT EXISTS downloaded_tracks_server_idx ON downloaded_tracks(server_url);",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "create_ytmusic_artist_cache_storage",
+            sql: "CREATE TABLE IF NOT EXISTS ytmusic_artists (
+                artist_key TEXT PRIMARY KEY NOT NULL,
+                data TEXT NOT NULL,
+                fetched_at TEXT NOT NULL
+            );",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -185,12 +195,17 @@ pub fn run() {
         })
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_thumbar::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:sonara_cache.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![greet, download_track])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            download_track,
+            ytmusic_request
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

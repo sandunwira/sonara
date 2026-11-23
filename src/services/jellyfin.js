@@ -101,6 +101,95 @@ export function getImageUrl(serverUrl, itemId, token, albumId = null) {
 	return `${base}/Items/${targetId}/Images/Primary?maxHeight=400&maxWidth=400&quality=90&api_key=${token}`;
 }
 
+const administratorChecks = new WeakMap();
+const artistImageUpdates = new Map();
+const YOUTUBE_IMAGE_HOSTS = ["googleusercontent.com", "ggpht.com", "ytimg.com"];
+
+export async function isJellyfinAdministrator(session) {
+	if (!session?.serverUrl || !session?.userId || !session?.accessToken) return false;
+
+	let check = administratorChecks.get(session);
+	if (!check) {
+		const base = cleanUrl(session.serverUrl);
+		check = fetch(`${base}/Users/Me`, {
+			headers: getAuthHeaders(session.accessToken),
+		})
+			.then(async (response) => {
+				if (!response.ok) {
+					throw new Error(`Could not verify Jellyfin administrator access (${response.status})`);
+				}
+				const user = await response.json();
+				return user.Policy?.IsAdministrator === true;
+			})
+			.catch((error) => {
+				administratorChecks.delete(session);
+				throw error;
+			});
+		administratorChecks.set(session, check);
+	}
+	return check;
+}
+
+async function updateArtistPrimaryImageIfMissing(session, artistId, artistName, imageUrl) {
+	if (!session?.serverUrl || !session?.userId || !session?.accessToken || (!artistId && !artistName) || !imageUrl) {
+		return false;
+	}
+
+	const parsedImageUrl = new URL(imageUrl);
+	const host = parsedImageUrl.hostname.toLowerCase();
+	if (
+		parsedImageUrl.protocol !== "https:"
+		|| !YOUTUBE_IMAGE_HOSTS.some((allowedHost) => host === allowedHost || host.endsWith(`.${allowedHost}`))
+	) {
+		throw new Error("The YouTube Music artist image URL is not from a trusted image host");
+	}
+
+	if (!await isJellyfinAdministrator(session)) return false;
+
+	const base = cleanUrl(session.serverUrl);
+	const artistItemUrl = artistId
+		? `${base}/Users/${encodeURIComponent(session.userId)}/Items/${encodeURIComponent(artistId)}`
+		: `${base}/Artists/${encodeURIComponent(artistName)}?${new URLSearchParams({ userId: session.userId })}`;
+	const itemResponse = await fetch(artistItemUrl, {
+		headers: getAuthHeaders(session.accessToken),
+	});
+	if (!itemResponse.ok) {
+		throw new Error(`Could not check the Jellyfin artist image (${itemResponse.status})`);
+	}
+	const artistItem = await itemResponse.json();
+	if (!artistItem.Id) {
+		throw new Error(`Jellyfin did not find an artist item for ${artistName}`);
+	}
+	if (artistItem.ImageTags?.Primary || artistItem.PrimaryImageTag) return false;
+
+	const targetArtistId = artistId || artistItem.Id;
+	const params = new URLSearchParams({
+		Type: "Primary",
+		ImageUrl: parsedImageUrl.toString(),
+	});
+	const updateResponse = await fetch(
+		`${base}/Items/${encodeURIComponent(targetArtistId)}/RemoteImages/Download?${params}`,
+		{
+			method: "POST",
+			headers: getAuthHeaders(session.accessToken),
+		},
+	);
+	if (!updateResponse.ok) {
+		throw new Error(`Could not save the YouTube Music image to Jellyfin (${updateResponse.status})`);
+	}
+	return true;
+}
+
+export function saveArtistProfileImageIfMissing(session, artistId, artistName, imageUrl) {
+	const key = `${cleanUrl(session?.serverUrl)}::${session?.userId}::${artistId || artistName}`;
+	if (artistImageUpdates.has(key)) return artistImageUpdates.get(key);
+
+	const pending = updateArtistPrimaryImageIfMissing(session, artistId, artistName, imageUrl)
+		.finally(() => artistImageUpdates.delete(key));
+	artistImageUpdates.set(key, pending);
+	return pending;
+}
+
 // Rewrites an existing Jellyfin image url to request a smaller variant for
 // thumbnails (row artwork renders at 36-48px, grid tiles at ~200px), cutting
 // image transfer and decode cost. Non-Jellyfin urls (data: urls, wave
@@ -120,7 +209,7 @@ export function getThumbnailUrl(coverUrl, size = 96) {
 
 export async function fetchUserMusic(serverUrl, userId, token, limit = 50, options = {}) {
 	const base = cleanUrl(serverUrl);
-	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&SortBy=PlayCount,DateCreated&SortOrder=Descending&Limit=${limit}&Fields=PrimaryImageAspectRatio,Genres,AlbumId,Artists`;
+	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&SortBy=PlayCount,DateCreated&SortOrder=Descending&Limit=${limit}&Fields=PrimaryImageAspectRatio,Genres,AlbumId,Artists,ArtistItems`;
 	const res = await fetchCachedJellyfinJson(url, getAuthHeaders(token), options);
 
 	if (!res.ok) {
@@ -133,7 +222,7 @@ export async function fetchUserMusic(serverUrl, userId, token, limit = 50, optio
 
 export async function fetchRecentlyPlayed(serverUrl, userId, token, limit = 50, options = {}) {
 	const base = cleanUrl(serverUrl);
-	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&IsPlayed=true&SortBy=DatePlayed&SortOrder=Descending&Limit=${limit}&Fields=PrimaryImageAspectRatio,Genres,AlbumId,Artists`;
+	const url = `${base}/Users/${userId}/Items?IncludeItemTypes=Audio&Recursive=true&IsPlayed=true&SortBy=DatePlayed&SortOrder=Descending&Limit=${limit}&Fields=PrimaryImageAspectRatio,Genres,AlbumId,Artists,ArtistItems`;
 	const res = await fetchCachedJellyfinJson(url, getAuthHeaders(token), options);
 
 	if (!res.ok) {
@@ -403,27 +492,48 @@ export function getTrackArtistLink(track) {
 
 export async function fetchMusicArtists(serverUrl, userId, token, { forceRefresh = false } = {}) {
 	const base = cleanUrl(serverUrl);
-	const params = new URLSearchParams({
-		userId,
-		SortBy: "SortName",
-		SortOrder: "Ascending",
-		EnableImages: "true",
-	});
-	let res;
-	try {
-		res = await fetchCachedJellyfinJson(`${base}/Artists?${params}`, getAuthHeaders(token), { forceRefresh });
-	} catch (error) {
-		if (forceRefresh || !await isJellyfinLibrarySynced(base, userId)) throw error;
-		const cachedItems = await getCachedJellyfinItems(base, userId);
-		const artists = cachedItems.filter((item) => item.Type === "MusicArtist");
-		if (artists.length === 0) throw error;
-		return artists.map((item) => formatJellyfinEntity(base, item, token));
-	}
-	if (!res.ok) {
-		throw new Error(`Failed to fetch artists (${res.status})`);
-	}
-	const data = await res.json();
-	return (data.Items || []).map((item) => formatJellyfinEntity(base, item, token));
+	const pageSize = 200;
+	const items = [];
+	let startIndex = 0;
+	let totalRecordCount = Infinity;
+	do {
+		const params = new URLSearchParams({
+			userId,
+			SortBy: "SortName",
+			SortOrder: "Ascending",
+			EnableImages: "true",
+			EnableTotalRecordCount: "true",
+			StartIndex: String(startIndex),
+			Limit: String(pageSize),
+		});
+		let res;
+		try {
+			res = await fetchCachedJellyfinJson(`${base}/Artists?${params}`, getAuthHeaders(token), { forceRefresh });
+		} catch (error) {
+			if (forceRefresh || !await isJellyfinLibrarySynced(base, userId)) throw error;
+			const cachedItems = await getCachedJellyfinItems(base, userId);
+			const artists = cachedItems.filter((item) => item.Type === "MusicArtist");
+			if (artists.length === 0) throw error;
+			return artists.map((item) => formatJellyfinEntity(base, item, token));
+		}
+		if (!res.ok) {
+			throw new Error(`Failed to fetch artists (${res.status})`);
+		}
+
+		const data = await res.json();
+		const pageItems = data.Items || [];
+		items.push(...pageItems);
+		if (Number.isFinite(data.TotalRecordCount)) totalRecordCount = data.TotalRecordCount;
+		startIndex += pageItems.length;
+		if (
+			pageItems.length === 0
+			|| startIndex >= totalRecordCount
+			|| (!Number.isFinite(totalRecordCount) && pageItems.length < pageSize)
+		) {
+			break;
+		}
+	} while (startIndex < totalRecordCount);
+	return items.map((item) => formatJellyfinEntity(base, item, token));
 }
 
 export async function fetchMusicLibraries(serverUrl, userId, token, { forceRefresh = false } = {}) {
